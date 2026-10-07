@@ -27,6 +27,9 @@ Last updated: 2026-10-08
 | D15 | LLM provider and key | Open | I need to confirm I have an API key and spending limit set up, and keep it in `.env` | Another provider behind the same interface |
 | D16 | Overall confidence is the lowest of the required fields, not an average | Proposed | A PO is only as good as its weakest field; a 0.9 average can hide one 0.2 that voids it | Averaging across fields |
 | D17 | Idempotency key = hash of message-id + supplier + CHF total | Proposed | Survives an API retry without a second PO, but a genuine corrected resend still gets through | Random key per attempt; message-id alone |
+| D18 | Approval band lookup ignores `from`; uses first band where `total ≤ band.to` (null = ∞) | Decided | Clean, no gap-handling code — 1000.50 naturally falls into band 2; resolves A1 | Checking `from` explicitly (requires gap-handling branch); rounding up to nearest integer |
+| D19 | FX: apply rate to the full total once, round to 2 dp with `Math.round(total × 100) / 100` | Decided | Per-line rounding accumulates drift; one round at the end is predictable | Per-line rounding; Decimal.js (overkill for 2 dp) |
+| D20 | Self-approval: remove requester from chain; valid iff remaining max role level ≥ band max | Decided | A higher role implicitly covers lower levels; if nobody above remains → human review | Reject the whole PO; escalate to next band |
 
 ## Assumptions about the spec
 
@@ -34,7 +37,7 @@ Fill these in as they are resolved. Reference the number in code comments and co
 
 | # | Question | Current default | Status |
 |---|---|---|---|
-| A1 | The approval table has gaps between ranges (e.g. 1,000.50 is neither ≤1,000 nor ≥1,001). Which band applies? | Anything above a band's upper limit moves to the next band (so 1,000.01 requires the second band) | Proposed; asked the interviewers |
+| A1 | The approval table has gaps between ranges (e.g. 1,000.50 is neither ≤1,000 nor ≥1,001). Which band applies? | Anything above a band's upper limit moves to the next band (so 1,000.01 requires the second band) | Decided (D18) |
 | A2 | Does the CHF total include VAT, shipping and discounts? | To decide after reading the quotes | Open |
 | A3 | Which FX rate and rounding rule apply? | Rate from `master_data.json`, rounded at the total | Open |
 | A4 | When information is missing, should the system draft a reply to the requester or only flag it? | Draft a reply and flag for the clerk | Open |
@@ -55,4 +58,4 @@ Fill in dates and answers here.
 ## Log of changes
 
 - 2026-10-07: initial decisions (D1 to D6 decided; D7 to D14 proposed; D15 open).
-- 2026-10-08: added D16 (weakest-link confidence) and D17 (idempotency key) from the design doc.
+- 2026-10-08: added D16 (weakest-link confidence) and D17 (idempotency key) from the design doc; added D18 (band gap rule, resolves A1), D19 (FX rounding), D20 (self-approval coverage) from implementation.
