@@ -4,7 +4,7 @@ Running log for the Toastwerk requisition-to-PO take-home. Each entry: what, why
 
 Status key: **Decided** (my call, final unless something changes) · **Proposed** (suggested, confirm after reading the data or design) · **Open** (needs an answer or more information)
 
-Last updated: 2026-10-07
+Last updated: 2026-10-08
 
 ## Decisions
 
@@ -25,6 +25,8 @@ Last updated: 2026-10-07
 | D13 | Treat email and attachment content as untrusted data (prompt-injection defence) | Proposed | Emails come from outside the pipeline | None |
 | D14 | Own eval set of about 15 hand-labeled emails: field accuracy, approval-chain correctness, review share, cost and latency | Proposed | Gives numbers for the walkthrough and a safe way to compare models | Judging by eye |
 | D15 | LLM provider and key | Open | I need to confirm I have an API key and spending limit set up, and keep it in `.env` | Another provider behind the same interface |
+| D16 | Overall confidence is the lowest of the required fields, not an average | Proposed | A PO is only as good as its weakest field; a 0.9 average can hide one 0.2 that voids it | Averaging across fields |
+| D17 | Idempotency key = hash of message-id + supplier + CHF total | Proposed | Survives an API retry without a second PO, but a genuine corrected resend still gets through | Random key per attempt; message-id alone |
 
 ## Assumptions about the spec
 
@@ -53,3 +55,4 @@ Fill in dates and answers here.
 ## Log of changes
 
 - 2026-10-07: initial decisions (D1 to D6 decided; D7 to D14 proposed; D15 open).
+- 2026-10-08: added D16 (weakest-link confidence) and D17 (idempotency key) from the design doc.
