@@ -1,0 +1,181 @@
+import { readFileSync } from 'fs';
+import { createHash } from 'crypto';
+import type Database from 'better-sqlite3';
+import type { LlmClient } from './llm/client';
+import type { AppConfig } from './config';
+import type { ProcessResult } from './types';
+import { ingestEml } from './ingest';
+import { selectAttachments } from './attachments';
+import { extractFromEmail, loadSystemPrompt } from './extract';
+import { resolveRequisition } from './resolve';
+import { decide } from './decide';
+import { submitPO } from './submit';
+import {
+  insertRequisition,
+  updateRequisitionStatus,
+  logLlmCall,
+  insertReviewItems,
+  insertPO,
+} from './audit';
+
+interface RunDeps {
+  db:     Database.Database;
+  client: LlmClient;
+  config: AppConfig;
+}
+
+// Processes a single .eml file end-to-end.
+// All errors are caught and returned as a 'failed' result so run-all can continue.
+export async function processEml(
+  emailPath: string,
+  { db, client, config }: RunDeps,
+): Promise<ProcessResult> {
+  const systemPrompt = loadSystemPrompt();
+  const model        = config.models.extraction;
+
+  try {
+    const raw   = readFileSync(emailPath);
+    const email = await ingestEml(raw);
+
+    // Idempotency: if this message-id already produced a PO, return it.
+    const existingPO = (db.prepare(`
+      SELECT po.po_number, po.total_chf, po.supplier_id
+      FROM po
+      JOIN requisition ON po.requisition_id = requisition.id
+      WHERE requisition.message_id = ?
+    `).get(email.messageId)) as { po_number: string; total_chf: number; supplier_id: string } | undefined;
+
+    if (existingPO) {
+      return {
+        status:    'duplicate',
+        emailPath,
+        messageId: email.messageId,
+        poNumber:  existingPO.po_number,
+        totalChf:  existingPO.total_chf,
+        supplier:  existingPO.supplier_id,
+      };
+    }
+
+    // Insert the requisition row so audit references are valid even on failure.
+    const reqId = insertRequisition(db, email, emailPath);
+
+    // Attachments: select PDFs within page limit
+    const { documentBlocks, overLimitFilenames } = selectAttachments(
+      email.attachments,
+      config.thresholds.pdfPageLimit,
+    );
+
+    if (overLimitFilenames.length > 0) {
+      // Flag over-limit files but continue — the model extracts from email text alone
+      insertReviewItems(db, reqId, overLimitFilenames.map(f => ({
+        code:   'over_page_limit',
+        queue:  'human' as const,
+        detail: `PDF exceeds page limit: ${f}`,
+      })));
+    }
+
+    // LLM extraction
+    const { extraction, calls } = await extractFromEmail(
+      email,
+      documentBlocks,
+      client,
+      systemPrompt,
+      model,
+    );
+
+    for (const call of calls) logLlmCall(db, reqId, call);
+
+    if (!extraction) {
+      updateRequisitionStatus(db, reqId, 'needs_human_review');
+      return {
+        status:    'needs_human_review',
+        emailPath,
+        messageId: email.messageId,
+        reasons:   [{ code: 'extraction_failed', queue: 'human', detail: 'LLM extraction failed after retry' }],
+      };
+    }
+
+    // Master-data resolution
+    const resolution = resolveRequisition(extraction, config.masterData);
+
+    // Status decision
+    const decision = decide(extraction, resolution, config.thresholds);
+
+    if (decision.status === 'ready') {
+      const idempotencyKey = computeIdempotencyKey(
+        email.messageId,
+        resolution.supplier?.match?.id ?? '',
+        resolution.computedTotalChf,
+      );
+
+      const po = await submitPO(config.poApiUrl, resolution, extraction, idempotencyKey);
+
+      insertPO(
+        db,
+        reqId,
+        po,
+        resolution.supplier!.match!.id,
+        resolution.computedTotalChf,
+        resolution.currency,
+        idempotencyKey,
+      );
+
+      updateRequisitionStatus(db, reqId, 'submitted', { extraction, resolution });
+
+      return {
+        status:            'submitted',
+        emailPath,
+        messageId:         email.messageId,
+        poNumber:          po.poNumber,
+        totalChf:          resolution.computedTotalChf,
+        supplier:          resolution.supplier?.match?.name,
+        supplierId:        resolution.supplier?.match?.id,
+        costCentreCode:    resolution.costCentre?.match?.code,
+        currency:          resolution.currency,
+        approvalChainIds:  resolution.chain?.ok ? resolution.chain.chain.map(s => s.employeeId) : undefined,
+        hasDeliveryDate:   !!extraction.delivery_date,
+        lineItemCount:     extraction.line_items?.length ?? 0,
+      };
+    }
+
+    insertReviewItems(db, reqId, decision.reasons);
+    updateRequisitionStatus(db, reqId, decision.status, {
+      extraction,
+      resolution,
+      draftReply: decision.draftReply,
+    });
+
+    return {
+      status:           decision.status,
+      emailPath,
+      messageId:        email.messageId,
+      totalChf:         resolution.computedTotalChf,
+      supplier:         resolution.supplier?.match?.name,
+      supplierId:       resolution.supplier?.match?.id,
+      costCentreCode:   resolution.costCentre?.match?.code,
+      currency:         resolution.currency,
+      approvalChainIds: resolution.chain?.ok ? resolution.chain.chain.map(s => s.employeeId) : undefined,
+      hasDeliveryDate:  !!extraction.delivery_date,
+      lineItemCount:    extraction.line_items?.length ?? 0,
+      reasons:          decision.reasons,
+      draftReply:       decision.draftReply,
+    };
+
+  } catch (err) {
+    return {
+      status:    'failed',
+      emailPath,
+      error:     err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// D17: idempotency key = sha256(message_id + supplier_id + totalChf rounded to 2 dp).
+function computeIdempotencyKey(
+  messageId:  string,
+  supplierId: string,
+  totalChf:   number,
+): string {
+  const payload = `${messageId}|${supplierId}|${totalChf.toFixed(2)}`;
+  return createHash('sha256').update(payload).digest('hex');
+}

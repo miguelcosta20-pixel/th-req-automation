@@ -74,3 +74,64 @@ export type Department = z.infer<typeof DepartmentSchema>;
 export type Employee = z.infer<typeof EmployeeSchema>;
 export type ApprovalBand = z.infer<typeof ApprovalBandSchema>;
 export type MasterData = z.infer<typeof MasterDataSchema>;
+
+// ── LLM extraction output ─────────────────────────────────────────────────────
+
+const SUPPORTED_CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'] as const;
+
+const ExtractionLineItemSchema = z.object({
+  description: z.string(),
+  quantity:    z.number().nullable(),
+  unit:        z.string().nullable(),
+  unit_price:  z.number().nullable(),
+  price_basis: z.enum(['per_unit', 'per_100']).nullable().optional(),
+  currency:    z.enum(SUPPORTED_CURRENCIES).nullable().optional(),
+});
+
+export const ExtractionSchema = z.object({
+  requester_name:        z.string().nullable(),
+  requester_email:       z.string().nullable(),
+  supplier_name:         z.string().nullable(),
+  currency:              z.enum(SUPPORTED_CURRENCIES).nullable(),
+  cost_centre_hint:      z.string().nullable().optional(),
+  delivery_date:         z.string().nullable().optional(),
+  line_items:            z.array(ExtractionLineItemSchema),
+  notes:                 z.string().nullable().optional(),
+  // Populated by the LLM when it detects social-engineering / prompt-injection
+  // attempts in the email. The value is copied verbatim; the pipeline routes it
+  // to the security queue. The field must exist but is null in normal emails.
+  instructions_to_reader: z.string().nullable().optional(),
+  field_confidence:      z.record(z.string(), z.number().min(0).max(1)),
+});
+
+export type Extraction = z.infer<typeof ExtractionSchema>;
+export type ExtractionLineItem = z.infer<typeof ExtractionLineItemSchema>;
+
+// ── PO API request / response ─────────────────────────────────────────────────
+
+const PoLineItemSchema = z.object({
+  item_name:  z.string(),
+  quantity:   z.number(),
+  unit_price: z.number(),
+  unit:       z.string(),
+  item_code:  z.string().optional(),
+});
+
+export const PoRequestSchema = z.object({
+  supplier_id:             z.string(),
+  currency:                z.enum(SUPPORTED_CURRENCIES),
+  total:                   z.number(),
+  requested_delivery_date: z.string(),
+  line_items:              z.array(PoLineItemSchema),
+  cost_centre:             z.string().optional(),
+  gl_account:              z.string().optional(),
+  tax_amount:              z.number().optional(),
+  requisition_reference:   z.string().optional(),
+});
+
+export const PoResponseSchema = z
+  .object({ po_number: z.string(), status: z.string() })
+  .passthrough();
+
+export type PoRequest  = z.infer<typeof PoRequestSchema>;
+export type PoResponse = z.infer<typeof PoResponseSchema>;
