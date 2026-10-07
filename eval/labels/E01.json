@@ -1,0 +1,16 @@
+{
+  "email_file": "data/emails/email_26.eml",
+  "description": "Clean EUR order — Verpackung Schneider, CC-1005, band 2, explicit delivery date",
+  "expected": {
+    "status": "submitted",
+    "supplier_id": "SUP-025",
+    "cost_centre_code": "CC-1005",
+    "currency": "EUR",
+    "has_delivery_date": true,
+    "min_line_items": 1,
+    "total_chf_range": [1500, 2500],
+    "approval_chain_ids": ["EMP-105", "EMP-506"]
+  },
+  "verify_after_run": false,
+  "notes": "Ahmed Nasser (EMP-112, requester_only) sends to procurement. CC-1005 owner=EMP-105 (Silvia Moser), LOG dept head=EMP-506 (Marco Bianchi). EUR 2100 × 0.96 = CHF 2016, band 2."
+}

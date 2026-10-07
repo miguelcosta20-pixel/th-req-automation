@@ -1,0 +1,16 @@
+{
+  "email_file": "data/emails/email_06.eml",
+  "description": "Clarification — verbal phone quote, explicit prices, no delivery date",
+  "expected": {
+    "status": "needs_clarification",
+    "supplier_id": "SUP-012",
+    "cost_centre_code": "CC-1003",
+    "currency": "USD",
+    "has_delivery_date": false,
+    "min_line_items": 1,
+    "total_chf_range": [5000, 9000],
+    "approval_chain_ids": null
+  },
+  "verify_after_run": true,
+  "notes": "Miriam Frick, Global Fastener Supply phone quote. Prices are explicit (USD 8400 total). No delivery date ('ordered this week' is not extractable as a date). USD 8400 × 0.88 = CHF 7392. May be needs_human_review if LLM assigns low confidence for 'phone quote' provenance. Update after first run."
+}

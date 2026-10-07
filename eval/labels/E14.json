@@ -1,0 +1,16 @@
+{
+  "email_file": "eval/emails/eval_edge_02_high_value.eml",
+  "description": "Edge case: CFO approval band — CHF 180k, band 4, full 4-step chain",
+  "expected": {
+    "status": "submitted",
+    "supplier_id": "SUP-008",
+    "cost_centre_code": "CC-1001",
+    "currency": "CHF",
+    "has_delivery_date": true,
+    "min_line_items": 1,
+    "total_chf_range": [170000, 190000],
+    "approval_chain_ids": ["EMP-101", "EMP-501", "EMP-701", "EMP-801"]
+  },
+  "verify_after_run": false,
+  "notes": "Luca Ferrari (EMP-311, requester_only). CHF 180000 → band 4 (50001-250000). CC-1001: owner=EMP-101, OPS head=EMP-501, finance=EMP-701, CFO=EMP-801. Luca is requester_only and not in chain → no self-removal."
+}

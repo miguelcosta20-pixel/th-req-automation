@@ -1,0 +1,16 @@
+{
+  "email_file": "data/emails/email_43.eml",
+  "description": "Clean CHF order — Rapid Prototyping Studio, CC-2003, band 2, explicit delivery date",
+  "expected": {
+    "status": "submitted",
+    "supplier_id": "SUP-024",
+    "cost_centre_code": "CC-2003",
+    "currency": "CHF",
+    "has_delivery_date": true,
+    "min_line_items": 1,
+    "total_chf_range": [7000, 10000],
+    "approval_chain_ids": ["EMP-203", "EMP-502"]
+  },
+  "verify_after_run": false,
+  "notes": "Sophie Dubois (EMP-210, requester_only). CC-2003 owner=EMP-203 (Fabio Rossi), RND dept head=EMP-502 (Markus Schmid). CHF 8500, band 2."
+}

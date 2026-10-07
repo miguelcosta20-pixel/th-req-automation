@@ -1,0 +1,16 @@
+{
+  "email_file": "eval/emails/eval_edge_01_per100.eml",
+  "description": "Edge case: per-100-unit pricing — 5000 pcs × CHF 4.80/100 = CHF 240, band 1",
+  "expected": {
+    "status": "submitted",
+    "supplier_id": "SUP-012",
+    "cost_centre_code": "CC-1001",
+    "currency": "CHF",
+    "has_delivery_date": true,
+    "min_line_items": 1,
+    "total_chf_range": [200, 280],
+    "approval_chain_ids": ["EMP-101"]
+  },
+  "verify_after_run": false,
+  "notes": "Tobias Weber (EMP-110, requester_only). Tests price_basis='per_100' extraction: 5000 × 4.80 / 100 = CHF 240.00. Band 1 (≤1000), CC-1001 owner=EMP-101 (Hans Meier). EMP-110 is not an approver → no self-removal."
+}

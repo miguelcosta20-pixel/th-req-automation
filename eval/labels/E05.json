@@ -1,0 +1,16 @@
+{
+  "email_file": "data/emails/email_02_inline_request.eml",
+  "description": "Clarification — supplier known, no price, no delivery date, vague cost centre",
+  "expected": {
+    "status": "needs_clarification",
+    "supplier_id": "SUP-005",
+    "cost_centre_code": null,
+    "currency": null,
+    "has_delivery_date": false,
+    "min_line_items": null,
+    "total_chf_range": null,
+    "approval_chain_ids": null
+  },
+  "verify_after_run": true,
+  "notes": "Emily Carter requests monitors. 'Office Plus Schweiz' → SUP-005 (active). 'London office cost center' is not a CC code — may or may not fuzzy-match CC-3002. No prices → no totalChf → missing_delivery_date + possibly missing_cost_centre. verify_after_run: the CC match depends on LLM and Fuse behaviour."
+}

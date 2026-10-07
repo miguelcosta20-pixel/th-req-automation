@@ -1,0 +1,16 @@
+{
+  "email_file": "data/emails/email_04_ambiguous.eml",
+  "description": "Completely vague request — no supplier, no CC, no price, no delivery date",
+  "expected": {
+    "status": "needs_human_review",
+    "supplier_id": null,
+    "cost_centre_code": null,
+    "currency": null,
+    "has_delivery_date": false,
+    "min_line_items": null,
+    "total_chf_range": null,
+    "approval_chain_ids": null
+  },
+  "verify_after_run": false,
+  "notes": "'Bitte das uebliche' — no extractable supplier name → supplier=null → unknown_supplier (human queue) escalates to needs_human_review despite all other reasons being clarification queue."
+}

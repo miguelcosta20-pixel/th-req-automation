@@ -1,0 +1,4 @@
+Language: English
+Currency: Pounds
+
+

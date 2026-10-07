@@ -1,0 +1,16 @@
+{
+  "email_file": "eval/emails/eval_edge_03_ambiguous.eml",
+  "description": "Edge case: ambiguous supplier — 'Acme Bearing' matches both SUP-001 and SUP-006",
+  "expected": {
+    "status": "needs_human_review",
+    "supplier_id": null,
+    "cost_centre_code": "CC-1003",
+    "currency": "EUR",
+    "has_delivery_date": true,
+    "min_line_items": 1,
+    "total_chf_range": [400, 800],
+    "approval_chain_ids": null
+  },
+  "verify_after_run": false,
+  "notes": "'Acme Bearing' (no GmbH/Group suffix) should score nearly equally against SUP-001 'Acme Bearings GmbH' and SUP-006 'ACME Bearing Group Ltd' — Fuse gap < 0.15 → ambiguous=true → ambiguous_supplier → human queue. EUR 625 × 0.96 = CHF 600."
+}

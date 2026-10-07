@@ -1,0 +1,16 @@
+{
+  "email_file": "data/emails/email_23.eml",
+  "description": "Human review — self-approval: Andrea Roth (EMP-501) owns CC-1004 and heads OPS",
+  "expected": {
+    "status": "needs_human_review",
+    "supplier_id": "SUP-013",
+    "cost_centre_code": "CC-1004",
+    "currency": "EUR",
+    "has_delivery_date": false,
+    "min_line_items": 1,
+    "total_chf_range": [5000, 8000],
+    "approval_chain_ids": null
+  },
+  "verify_after_run": false,
+  "notes": "Sender=Andrea Roth (EMP-501). CC-1004 owner=EMP-501, OPS dept head=EMP-501. After collapse+self-removal the chain is empty → chain.ok=false → no_approval_chain (human queue). EUR 7200 × 0.96 = CHF 6912, band 2."
+}

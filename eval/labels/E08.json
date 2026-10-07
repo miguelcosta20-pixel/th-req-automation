@@ -1,0 +1,16 @@
+{
+  "email_file": "data/emails/email_09.eml",
+  "description": "Human review — blocked supplier (Baltic Steel Trading OÜ)",
+  "expected": {
+    "status": "needs_human_review",
+    "supplier_id": "SUP-018",
+    "cost_centre_code": "CC-1005",
+    "currency": null,
+    "has_delivery_date": null,
+    "min_line_items": null,
+    "total_chf_range": null,
+    "approval_chain_ids": null
+  },
+  "verify_after_run": false,
+  "notes": "Ahmed Nasser, PDF quote from Baltic Steel. 'Baltic Steel Trading' → SUP-018 (status=blocked) → blocked_supplier → human queue. Line items and total are in the PDF only, so not checked here."
+}

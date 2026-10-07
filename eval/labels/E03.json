@@ -1,0 +1,16 @@
+{
+  "email_file": "data/emails/email_48.eml",
+  "description": "Clean EUR order — Kabelwerk Rheintal, CC-1002, band 2, tab-formatted table",
+  "expected": {
+    "status": "submitted",
+    "supplier_id": "SUP-010",
+    "cost_centre_code": "CC-1002",
+    "currency": "EUR",
+    "has_delivery_date": true,
+    "min_line_items": 1,
+    "total_chf_range": [6000, 8000],
+    "approval_chain_ids": ["EMP-102", "EMP-501"]
+  },
+  "verify_after_run": false,
+  "notes": "Miriam Frick (EMP-111, requester_only). Data pasted from a stock sheet as tab-separated columns. EUR 7450 × 0.96 = CHF 7152, band 2. CC-1002 owner=EMP-102 (Petra Brunner), OPS head=EMP-501 (Andrea Roth)."
+}
