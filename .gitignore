@@ -2,3 +2,7 @@
 node_modules/
 .env
 *.db
+*.db-shm
+*.db-wal
+eval/results/
+demo/inbox/

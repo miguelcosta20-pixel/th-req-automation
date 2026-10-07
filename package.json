@@ -4,13 +4,22 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cli": "tsx src/cli.ts",
+    "eval": "tsx src/eval.ts",
+    "demo": "tsx src/demo.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^16.0.0",
     "fuse.js": "^7",
+    "mailparser": "^3.7.0",
     "zod": "^3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/mailparser": "^3.4.0",
     "@types/node": "^22",
     "tsx": "^4",
     "typescript": "^5",

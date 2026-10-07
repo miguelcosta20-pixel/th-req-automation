@@ -1,7 +1,5 @@
 // Shared pipeline types that cross module boundaries.
 
-import type { Extraction } from './schema';
-
 export interface ParsedAttachment {
   filename: string;
   contentType: string;
@@ -78,27 +76,4 @@ export interface ProcessResult {
   approvalChainIds?: string[];
   hasDeliveryDate?: boolean;
   lineItemCount?: number;
-}
-
-// Rich intermediate result returned by analyzeEml() for the demo page.
-export interface DemoResult {
-  messageId: string;
-  emailInfo: { subject: string; from: string };
-  extraction: Extraction | null;
-  resolution: {
-    supplier:        { id: string | null; name: string | null; score: number; ambiguous: boolean; blocked: boolean } | null;
-    costCentre:      { code: string | null; name: string | null; score: number } | null;
-    requester:       { id: string | null; name: string | null } | null;
-    totalChf:        number;
-    currency:        string;
-    chain:           Array<{ employeeId: string; name: string; email: string; role: string }> | null;
-    chainOk:         boolean;
-    chainFailReason: string | null;
-  } | null;
-  decision: { status: string; reasons: ReviewReason[]; draftReply?: string } | null;
-  po:     { poNumber: string; status: string; warnings?: string[] } | null;
-  llm:    { model: string; tokensIn: number; tokensOut: number; costChf: number; latencyMs: number } | null;
-  dryRun: boolean;
-  totalMs: number;
-  error?: string;
 }

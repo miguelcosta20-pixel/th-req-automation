@@ -22,18 +22,23 @@ interface RunDeps {
   db:     Database.Database;
   client: LlmClient;
   config: AppConfig;
+  // Optional progress hook. Instrumentation only — it never affects routing or
+  // output. The demo server uses it to stream live stage updates; the CLI and
+  // eval harness omit it. Called at the start of each phase.
+  onStage?: (stage: 'ingest' | 'extract' | 'resolve' | 'decide' | 'submit') => void;
 }
 
 // Processes a single .eml file end-to-end.
 // All errors are caught and returned as a 'failed' result so run-all can continue.
 export async function processEml(
   emailPath: string,
-  { db, client, config }: RunDeps,
+  { db, client, config, onStage }: RunDeps,
 ): Promise<ProcessResult> {
   const systemPrompt = loadSystemPrompt();
   const model        = config.models.extraction;
 
   try {
+    onStage?.('ingest');
     const raw   = readFileSync(emailPath);
     const email = await ingestEml(raw);
 
@@ -75,6 +80,7 @@ export async function processEml(
     }
 
     // LLM extraction
+    onStage?.('extract');
     const { extraction, calls } = await extractFromEmail(
       email,
       documentBlocks,
@@ -96,12 +102,15 @@ export async function processEml(
     }
 
     // Master-data resolution
+    onStage?.('resolve');
     const resolution = resolveRequisition(extraction, config.masterData);
 
     // Status decision
+    onStage?.('decide');
     const decision = decide(extraction, resolution, config.thresholds);
 
     if (decision.status === 'ready') {
+      onStage?.('submit');
       const idempotencyKey = computeIdempotencyKey(
         email.messageId,
         resolution.supplier?.match?.id ?? '',

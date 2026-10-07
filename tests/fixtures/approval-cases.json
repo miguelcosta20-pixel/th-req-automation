@@ -1,0 +1,29 @@
+{
+  "description": "Boundary cases for the approval-band routing function findBand(). Single source of truth shared by Vitest (tests/approvals.band.test.ts) and the demo Rules screen. 'bands' mirrors master_data.json approval_limits_chf so the test is self-contained; the Rules screen runs these same cases against the live master data to prove the real routing matches these expectations.",
+  "bands": [
+    { "from": 0,      "to": 1000,   "required_roles": ["cost_center_owner"] },
+    { "from": 1001,   "to": 10000,  "required_roles": ["cost_center_owner", "department_head"] },
+    { "from": 10001,  "to": 50000,  "required_roles": ["cost_center_owner", "department_head", "finance"] },
+    { "from": 50001,  "to": 250000, "required_roles": ["cost_center_owner", "department_head", "finance", "cfo"] },
+    { "from": 250001, "to": null,   "required_roles": ["cost_center_owner", "department_head", "finance", "cfo", "ceo"] }
+  ],
+  "cases": [
+    { "total": 0,         "expected_band": 1, "expected_role_count": 1, "note": "Zero total → band 1" },
+    { "total": 500,       "expected_band": 1, "expected_role_count": 1, "note": "Mid band 1" },
+    { "total": 1000,      "expected_band": 1, "expected_role_count": 1, "note": "Exactly at band 1 ceiling" },
+    { "total": 1000.01,   "expected_band": 2, "expected_role_count": 2, "note": "Gap above band 1 ceiling → next band (D18)" },
+    { "total": 1000.50,   "expected_band": 2, "expected_role_count": 2, "note": "The A1 gap example → band 2" },
+    { "total": 1000.99,   "expected_band": 2, "expected_role_count": 2, "note": "Gap just below band 2 floor → band 2" },
+    { "total": 1001,      "expected_band": 2, "expected_role_count": 2, "note": "Band 2 floor" },
+    { "total": 10000,     "expected_band": 2, "expected_role_count": 2, "note": "Band 2 ceiling" },
+    { "total": 10000.01,  "expected_band": 3, "expected_role_count": 3, "note": "Gap → band 3" },
+    { "total": 10001,     "expected_band": 3, "expected_role_count": 3, "note": "Band 3 floor" },
+    { "total": 50000,     "expected_band": 3, "expected_role_count": 3, "note": "Band 3 ceiling" },
+    { "total": 50000.01,  "expected_band": 4, "expected_role_count": 4, "note": "Gap → band 4" },
+    { "total": 50001,     "expected_band": 4, "expected_role_count": 4, "note": "Band 4 floor" },
+    { "total": 250000,    "expected_band": 4, "expected_role_count": 4, "note": "Band 4 ceiling" },
+    { "total": 250000.01, "expected_band": 5, "expected_role_count": 5, "note": "Gap → band 5" },
+    { "total": 250001,    "expected_band": 5, "expected_role_count": 5, "note": "Band 5 floor" },
+    { "total": 1000000,   "expected_band": 5, "expected_role_count": 5, "note": "Well into band 5 (null ceiling = infinity)" }
+  ]
+}
