@@ -1,0 +1,14 @@
+{
+  "customer": "toastwerk",
+  "masterDataPath": "./data/master_data.json",
+  "poApiUrl": "http://127.0.0.1:8080",
+  "dbPath": "./state.db",
+  "thresholds": {
+    "autoConfidence": 0.80,
+    "clarifyFloor": 0.50,
+    "pdfPageLimit": 15
+  },
+  "models": {
+    "extraction": "claude-sonnet-5-5"
+  }
+}
