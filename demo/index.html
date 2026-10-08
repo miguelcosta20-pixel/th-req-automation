@@ -619,6 +619,10 @@ function masterDataCard(sol) {
     : `<span class="chip chip-green">✓ ${esc(sup.match.name)}</span> <span style="color:#9ca3af;font-size:11px">${esc(sup.match.id)}</span> ${matchPill(sup)}`;
   const ccMain = !cc?.match ? '<span class="chip chip-gray">no match (n/a)</span>' : `<span class="chip chip-green">✓ ${esc(cc.match.code)} — ${esc(cc.match.name)}</span> ${matchPill(cc)}`;
   const empMain = !emp?.match ? '<span class="chip chip-gray">not resolved (n/a)</span>' : `<span class="chip chip-green">${esc(emp.match.name)}</span> <span style="color:#9ca3af;font-size:11px">${esc(emp.match.id)}</span> ${matchPill(emp)}`;
+  const gl = sol.glAccount;
+  const glMain = !gl?.match ? '<span class="chip chip-gray">left for ERP determination</span>'
+    : gl.ambiguous ? `<span class="chip chip-amber">⚠ ${esc(gl.match.code)} ${esc(gl.match.name)} (ambiguous — not sent)</span>`
+    : `<span class="chip chip-green">✓ ${esc(gl.match.code)} — ${esc(gl.match.name)}</span> ${matchPill(gl)}`;
   const oneline = `${sup?.match?'supplier ✓':'supplier ✗'} · ${cc?.match?'CC ✓':'CC ✗'} · ${emp?.match?'requester ✓':'requester ✗'}`;
   return sec('Master-data resolution', oneline, `
     <div style="font-size:11px;color:#6b7280;margin-bottom:8px">Match % is the fuzzy <strong>master-data match</strong> strength — not the model's confidence.</div>
@@ -626,6 +630,7 @@ function masterDataCard(sol) {
       <tr><td>Supplier</td><td>${supMain}</td></tr>
       <tr><td>Cost centre</td><td>${ccMain}</td></tr>
       <tr><td>Requester</td><td>${empMain}</td></tr>
+      <tr><td>GL account</td><td>${glMain}</td></tr>
     </table>`);
 }
 function chfCard(sol, ext) {

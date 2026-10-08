@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { MasterDataSchema } from '../src/schema';
-import { resolveSupplier, resolveCostCentre, resolveEmployee } from '../src/resolve';
+import { resolveSupplier, resolveCostCentre, resolveEmployee, resolveGlAccount } from '../src/resolve';
 import type { MasterData } from '../src/schema';
 
 // Real master data — resolve tests exercise the actual data quality issues
@@ -106,6 +106,31 @@ describe('resolveEmployee', () => {
 
   it('T54 — unknown external email → no match', () => {
     const r = resolveEmployee('unknown@external.com', md.employees);
+    expect(r.match).toBeNull();
+  });
+});
+
+// ── GL account determination (category → GL) ──────────────────────────────────
+
+describe('resolveGlAccount', () => {
+  it('T54a — "packaging" → 7500 Packaging Material, unambiguous', () => {
+    const r = resolveGlAccount('packaging', md.gl_accounts);
+    expect(r.match?.code).toBe('7500');
+    expect(r.ambiguous).toBe(false);
+  });
+
+  it('T54b — "office supplies" → 7100 Office Supplies', () => {
+    const r = resolveGlAccount('office supplies', md.gl_accounts);
+    expect(r.match?.code).toBe('7100');
+  });
+
+  it('T54c — "spare parts" → 5300 Spare Parts', () => {
+    const r = resolveGlAccount('spare parts', md.gl_accounts);
+    expect(r.match?.code).toBe('5300');
+  });
+
+  it('T54d — gibberish category → no match (left for ERP)', () => {
+    const r = resolveGlAccount('zzzzz nonsense xyz', md.gl_accounts);
     expect(r.match).toBeNull();
   });
 });

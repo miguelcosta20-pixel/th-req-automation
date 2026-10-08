@@ -1,5 +1,5 @@
 import Fuse, { type FuseResult } from 'fuse.js';
-import type { Supplier, CostCentre, Employee, MasterData, Extraction } from './schema';
+import type { Supplier, CostCentre, Employee, GlAccount, MasterData, Extraction } from './schema';
 import { convertToChf } from './fx';
 import { buildApprovalChain } from './approvals';
 import type { ChainResult } from './approvals';
@@ -27,6 +27,7 @@ export interface FullResolution {
   supplier:         ResolveResult<Supplier> | null;
   costCentre:       ResolveResult<CostCentre> | null;
   employee:         ResolveResult<Employee> | null;
+  glAccount:        ResolveResult<GlAccount> | null;
   currency:         string;
   fxRate:           number;
   computedTotalChf: number;
@@ -72,6 +73,19 @@ export function resolveEmployee(hint: string, employees: Employee[]): ResolveRes
   return toResult(fuse.search(hint));
 }
 
+// Maps a generic purchasing category ("spare parts", "packaging") to a GL account
+// by fuzzy-matching the account names. GL determination is advisory, so the caller
+// only auto-fills on an unambiguous match (match && !ambiguous).
+export function resolveGlAccount(hint: string, glAccounts: GlAccount[]): ResolveResult<GlAccount> {
+  const fuse = new Fuse(glAccounts, {
+    keys: ['name'],
+    threshold: MATCH_THRESHOLD,
+    includeScore: true,
+    isCaseSensitive: false,
+  });
+  return toResult(fuse.search(hint));
+}
+
 // Resolves all master-data references for a single extraction and computes
 // the approval chain. Used by the pipeline to produce a FullResolution for
 // decide() and submit(). `anchorDate` is the email's send date — relative
@@ -91,6 +105,10 @@ export function resolveRequisition(extraction: Extraction, masterData: MasterDat
 
   const employee    = extraction.requester_email
     ? resolveEmployee(extraction.requester_email, masterData.employees)
+    : null;
+
+  const glAccount   = extraction.category_hint
+    ? resolveGlAccount(extraction.category_hint, masterData.gl_accounts)
     : null;
 
   // Compute raw total from line items (before FX conversion).
@@ -118,7 +136,7 @@ export function resolveRequisition(extraction: Extraction, masterData: MasterDat
     );
   }
 
-  return { supplier, costCentre, employee, currency, fxRate, computedTotalChf, chain, delivery: resolveDelivery(extraction.delivery, anchorDate, defaultLeadDays) };
+  return { supplier, costCentre, employee, glAccount, currency, fxRate, computedTotalChf, chain, delivery: resolveDelivery(extraction.delivery, anchorDate, defaultLeadDays) };
 }
 
 function toResult<T>(results: FuseResult<T>[]): ResolveResult<T> {

@@ -53,6 +53,7 @@ const goodResolution: FullResolution = {
     match: { id: 'EMP-101', name: 'Hans Meier', email: 'hans.meier@customer.com', role: 'cost_center_owner' },
     score: 0.95, ambiguous: false,
   },
+  glAccount:        null,
   currency:         'EUR',
   fxRate:           0.96,
   computedTotalChf: 120.0,

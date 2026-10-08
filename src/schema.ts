@@ -73,6 +73,7 @@ export type CostCentre = z.infer<typeof CostCentreSchema>;
 export type Department = z.infer<typeof DepartmentSchema>;
 export type Employee = z.infer<typeof EmployeeSchema>;
 export type ApprovalBand = z.infer<typeof ApprovalBandSchema>;
+export type GlAccount = z.infer<typeof GlAccountSchema>;
 export type MasterData = z.infer<typeof MasterDataSchema>;
 
 // ── LLM extraction output ─────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ export const ExtractionSchema = z.object({
   supplier_name:         z.string().nullable(),
   currency:              z.enum(SUPPORTED_CURRENCIES).nullable(),
   cost_centre_hint:      z.string().nullable().optional(),
+  category_hint:         z.string().nullable().optional(),   // generic purchasing category of the goods, for GL determination
   delivery:              DeliverySchema.optional(),
   line_items:            z.array(ExtractionLineItemSchema),
   notes:                 z.string().nullable().optional(),

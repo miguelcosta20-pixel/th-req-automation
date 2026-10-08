@@ -60,6 +60,11 @@ export async function submitPO(
 
   const { lineItems, total } = buildPoLines(extraction);
 
+  // GL account is advisory and inferred (not stated in the email), so only send
+  // it on an unambiguous category match — otherwise leave it for the ERP / a human.
+  const gl = resolution.glAccount;
+  const glAccount = gl?.match && !gl.ambiguous ? gl.match.code : undefined;
+
   const body = PoRequestSchema.parse({
     supplier_id:             supplier.id,
     currency:                resolution.currency,
@@ -67,6 +72,7 @@ export async function submitPO(
     requested_delivery_date: deliveryDate,
     line_items:              lineItems,
     cost_centre:             resolution.costCentre?.match?.code,
+    gl_account:              glAccount,
     requisition_reference:   idempotencyKey.slice(0, 40),
   });
 

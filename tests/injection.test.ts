@@ -44,6 +44,7 @@ const cleanResolution: FullResolution = {
     score: 0.95, ambiguous: false,
   },
   currency: 'EUR', fxRate: 0.96, computedTotalChf: 163.2,
+  glAccount: null,
   chain: { ok: true, chain: [{ employeeId: 'EMP-501', name: 'Andrea Roth', email: 'andrea.roth@customer.com', role: 'department_head' }] },
   delivery: { kind: 'explicit', date: '2026-11-20', basis: 'explicit', urgency: null, timeframe: null, evidence: 'by 20 Nov', reasoning: null, note: null },
 };

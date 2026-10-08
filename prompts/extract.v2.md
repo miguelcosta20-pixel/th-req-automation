@@ -8,6 +8,7 @@ Return ONLY a valid JSON object matching this exact schema:
 "supplier_name": "string or null",
 "currency": "CHF | EUR | USD | GBP | null",
 "cost_centre_hint": "string or null — the cost centre code or name mentioned (e.g. CC-1001, Plant Maintenance)",
+"category_hint": "string or null — a short, generic purchasing category for the goods (e.g. 'spare parts', 'office supplies', 'packaging', 'IT equipment', 'maintenance materials'); used downstream for GL account determination",
 "delivery": {
 "kind": "explicit | relative | urgency | none",
 "explicit_date": "YYYY-MM-DD or null — a stated calendar date or a reliably resolved delivery deadline",
@@ -47,6 +48,8 @@ Rules:
 3. price_basis: set "per_100" only when the document explicitly states a price per 100 units (e.g. "Preis per 100 Stk", "per 100 pieces"). Otherwise use "per_unit" when the price is clearly per individual unit, or null when the basis is unknown.
 
 3a. item_code: if a line states a supplier part, material, article or catalogue number (e.g. "Art.-Nr. 6204-2RS", "SKU 10293", "Material 1000456"), copy it verbatim into "item_code". If the line is free text with no such number, set null — do not invent one.
+
+3b. category_hint: infer a short, generic category for what is being purchased (e.g. "spare parts", "office supplies", "packaging", "IT equipment", "lab equipment", "maintenance materials"). This is a general classification of the goods, not a GL code and not customer-specific — downstream code maps it to a GL account. Set null if the goods are too unclear to categorise.
 
 4. field_confidence: your certainty for each required field (1.0 = certain, 0.7 = likely correct, 0.4 = uncertain, 0.2 = very uncertain). Base confidence on the available evidence. Do not treat a calculated date as explicitly stated in the source.
 
