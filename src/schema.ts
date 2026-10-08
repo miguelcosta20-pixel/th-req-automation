@@ -86,6 +86,7 @@ const ExtractionLineItemSchema = z.object({
   unit_price:  z.number().nullable(),
   price_basis: z.enum(['per_unit', 'per_100']).nullable().optional(),
   currency:    z.enum(SUPPORTED_CURRENCIES).nullable().optional(),
+  item_code:   z.string().nullable().optional(),   // supplier part/material number, when the line states one
 });
 
 // Delivery requirement as understood from natural language. The LLM only

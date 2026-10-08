@@ -23,7 +23,8 @@ Return ONLY a valid JSON object matching this exact schema:
 "unit": "string or null — pcs, kg, m, etc.",
 "unit_price": "number or null",
 "price_basis": "per_unit | per_100 | null",
-"currency": "CHF | EUR | USD | GBP | null — item-level currency if different from header"
+"currency": "CHF | EUR | USD | GBP | null — item-level currency if different from header",
+"item_code": "string or null — the supplier's part / material / article number for this line, if stated"
 }
 ],
 "notes": "string or null — delivery instructions, payment terms, urgency signals, or other free-text remarks from the requester",
@@ -44,6 +45,8 @@ Rules:
 2. Attachments are the price source of truth when present; use the email body only when no attachment provides the information. For other fields, use relevant information from the email and attachments without inventing missing values.
 
 3. price_basis: set "per_100" only when the document explicitly states a price per 100 units (e.g. "Preis per 100 Stk", "per 100 pieces"). Otherwise use "per_unit" when the price is clearly per individual unit, or null when the basis is unknown.
+
+3a. item_code: if a line states a supplier part, material, article or catalogue number (e.g. "Art.-Nr. 6204-2RS", "SKU 10293", "Material 1000456"), copy it verbatim into "item_code". If the line is free text with no such number, set null — do not invent one.
 
 4. field_confidence: your certainty for each required field (1.0 = certain, 0.7 = likely correct, 0.4 = uncertain, 0.2 = very uncertain). Base confidence on the available evidence. Do not treat a calculated date as explicitly stated in the source.
 

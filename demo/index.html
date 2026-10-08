@@ -571,7 +571,7 @@ function lineItemsCard(ext) {
       const p100 = i.price_basis === 'per_100';
       const lt = (i.quantity!=null && i.unit_price!=null) ? (p100 ? i.quantity*i.unit_price/100 : i.quantity*i.unit_price) : null;
       const ic = i.currency ?? c;
-      return `<tr><td style="text-align:left">${esc(i.description)}</td><td>${i.quantity!=null?i.quantity.toLocaleString('de-CH'):'n/a'}</td><td>${i.unit?esc(i.unit):'n/a'}</td><td>${i.unit_price!=null?`${ic} ${chf(i.unit_price)}${p100?' <span class="chip chip-purple" style="font-size:9px;padding:0 4px">÷100</span>':''}`:'n/a'}</td><td>${lt!=null?`${ic} ${chf(lt)}`:'n/a'}</td></tr>`;
+      return `<tr><td style="text-align:left">${esc(i.description)}${i.item_code?`<div style="font-size:10px;color:#9ca3af;font-family:monospace">${esc(i.item_code)}</div>`:''}</td><td>${i.quantity!=null?i.quantity.toLocaleString('de-CH'):'n/a'}</td><td>${i.unit?esc(i.unit):'n/a'}</td><td>${i.unit_price!=null?`${ic} ${chf(i.unit_price)}${p100?' <span class="chip chip-purple" style="font-size:9px;padding:0 4px">÷100</span>':''}`:'n/a'}</td><td>${lt!=null?`${ic} ${chf(lt)}`:'n/a'}</td></tr>`;
     }).join('')}
     <tr class="total-row"><td colspan="4" style="text-align:right;color:#6b7280">Raw total (${esc(c)})</td><td>${esc(c)} ${chf(rawTotalOf(ext))}</td></tr>
     </tbody></table>`;
@@ -672,7 +672,7 @@ function poCard(d) {
   return card('Purchase order', `
     <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:center">
       <div><div style="font-size:11px;color:#6b7280">PO NUMBER</div><div style="font-size:18px;font-weight:700;font-family:monospace;color:#166534">${esc(d.po.po_number)}</div></div>
-      <div><div style="font-size:11px;color:#6b7280">TOTAL</div><div class="mono" style="font-size:15px">${cur(d.po.total_chf, d.po.currency)}</div></div>
+      <div><div style="font-size:11px;color:#6b7280">TOTAL</div><div class="mono" style="font-size:15px">CHF ${chf(d.po.total_chf)}</div></div>
     </div>
     ${warnings.length ? `<div style="margin-top:10px">${warnings.map(w=>`<div style="font-size:12px;color:#92400e">⚠ ${esc(w)}</div>`).join('')}</div>` : ''}
   `);
