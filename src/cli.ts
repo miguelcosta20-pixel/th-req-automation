@@ -84,6 +84,25 @@ async function main() {
         }
         break;
       }
+
+      // Look up one specific email by its resolved path.
+      const absPath = resolve(process.cwd(), emailPath);
+      const row = db.prepare(`
+        SELECT r.message_id, r.subject, r.status, r.created_at,
+               p.po_number
+        FROM requisition r
+        LEFT JOIN po p ON p.requisition_id = r.id
+        WHERE r.email_path = ?
+        ORDER BY r.created_at DESC LIMIT 1
+      `).get(absPath) as { message_id: string; subject: string; status: string; created_at: string; po_number: string | null } | undefined;
+
+      if (!row) {
+        console.log(`No record for ${emailPath} — process it first with: tsx src/cli.ts run ${emailPath}`);
+      } else {
+        console.log(`  ${statusIcon(row.status)} ${row.status.padEnd(22)} ${row.subject ?? ''}`);
+        console.log(`     ${row.message_id}`);
+        if (row.po_number) console.log(`     PO: ${row.po_number}`);
+      }
       break;
     }
 

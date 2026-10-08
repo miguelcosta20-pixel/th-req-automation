@@ -10,6 +10,6 @@
     "defaultDeliveryLeadDays": 14
   },
   "models": {
-    "extraction": "claude-haiku-4-5"
+    "extraction": "claude-haiku-4-5-20251001"
   }
 }

@@ -1,14 +1,12 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, basename } from 'path';
 import { createHash } from 'crypto';
 import { ExtractionSchema } from './schema';
 import { computeCostChf } from './llm/pricing';
 import type { LlmClient, LlmRequest, ContentBlock } from './llm/client';
 import type { ParsedEmail, DocumentBlock, LlmCallRecord } from './types';
 import type { Extraction } from './schema';
-
-const PROMPT_VERSION = 'extract.v2';
 
 // Resolved once at module load — prompts/ sits beside src/.
 const PROMPT_PATH = join(
@@ -17,6 +15,9 @@ const PROMPT_PATH = join(
   'prompts',
   'extract.v2.md',
 );
+
+// Derived from the filename so the log version stays in sync with the file.
+const PROMPT_VERSION = basename(PROMPT_PATH, '.md');
 
 export function loadSystemPrompt(): string {
   return readFileSync(PROMPT_PATH, 'utf-8');
