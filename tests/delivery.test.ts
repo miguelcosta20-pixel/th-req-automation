@@ -81,6 +81,20 @@ describe('resolveDelivery', () => {
     expect(r.urgency).toBe('high');
     expect(r.timeframe).toBe('ASAP');
   });
+  it('T92a — flexible (low urgency) gets the default lead time, basis=default', () => {
+    const r = resolveDelivery(delivery({ kind: 'urgency', timeframe: 'whenever you can', urgency: 'low' }), ANCHOR, 14);
+    expect(r).toMatchObject({ date: '2026-05-28', basis: 'default' });   // 2026-05-14 + 14
+    expect(r.note).toContain('standard lead time');
+  });
+  it('T92b — high urgency does NOT get a default even when one is configured', () => {
+    const r = resolveDelivery(delivery({ kind: 'urgency', timeframe: 'ASAP', urgency: 'high' }), ANCHOR, 14);
+    expect(r.date).toBeNull();
+    expect(r.basis).toBe('none');
+  });
+  it('T92c — flexible with no configured lead time still asks (no date)', () => {
+    const r = resolveDelivery(delivery({ kind: 'urgency', timeframe: 'no rush', urgency: 'low' }), ANCHOR);
+    expect(r.date).toBeNull();
+  });
   it('T93 — none → no date', () => {
     expect(resolveDelivery(delivery({ kind: 'none' }), ANCHOR).date).toBeNull();
   });

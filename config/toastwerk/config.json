@@ -6,9 +6,10 @@
   "thresholds": {
     "autoConfidence": 0.80,
     "clarifyFloor": 0.50,
-    "pdfPageLimit": 15
+    "pdfPageLimit": 15,
+    "defaultDeliveryLeadDays": 14
   },
   "models": {
-    "extraction": "claude-sonnet-4-6"
+    "extraction": "claude-haiku-4-5"
   }
 }

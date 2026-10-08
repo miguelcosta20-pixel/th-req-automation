@@ -75,8 +75,9 @@ export function resolveEmployee(hint: string, employees: Employee[]): ResolveRes
 // Resolves all master-data references for a single extraction and computes
 // the approval chain. Used by the pipeline to produce a FullResolution for
 // decide() and submit(). `anchorDate` is the email's send date — relative
-// delivery timeframes ("next week") are resolved against it.
-export function resolveRequisition(extraction: Extraction, masterData: MasterData, anchorDate: Date): FullResolution {
+// delivery timeframes ("next week") are resolved against it, and `defaultLeadDays`
+// lets an explicitly flexible request fall back to a standard lead time.
+export function resolveRequisition(extraction: Extraction, masterData: MasterData, anchorDate: Date, defaultLeadDays?: number): FullResolution {
   const currency = extraction.currency ?? 'CHF';
   const fxRate   = masterData._meta.fx_rates_to_chf[currency] ?? 1;
 
@@ -117,7 +118,7 @@ export function resolveRequisition(extraction: Extraction, masterData: MasterDat
     );
   }
 
-  return { supplier, costCentre, employee, currency, fxRate, computedTotalChf, chain, delivery: resolveDelivery(extraction.delivery, anchorDate) };
+  return { supplier, costCentre, employee, currency, fxRate, computedTotalChf, chain, delivery: resolveDelivery(extraction.delivery, anchorDate, defaultLeadDays) };
 }
 
 function toResult<T>(results: FuseResult<T>[]): ResolveResult<T> {

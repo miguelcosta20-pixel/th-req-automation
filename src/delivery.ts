@@ -17,13 +17,13 @@ import type { Delivery } from './schema';
 
 export interface ResolvedDelivery {
   kind:      'explicit' | 'relative' | 'urgency' | 'none';
-  date:      string | null;                       // ISO YYYY-MM-DD for the PO; null when unresolved
-  basis:     'explicit' | 'relative' | 'none';    // how `date` was obtained
+  date:      string | null;                                   // ISO YYYY-MM-DD for the PO; null when unresolved
+  basis:     'explicit' | 'relative' | 'default' | 'none';    // how `date` was obtained
   urgency:   'high' | 'normal' | 'low' | null;
-  timeframe: string | null;                       // the raw phrase, for traceability
-  evidence:  string | null;                       // verbatim quote the classification rests on
-  reasoning: string | null;                       // the LLM's one-line rationale
-  note:      string | null;                       // code-side note on how the date was derived
+  timeframe: string | null;                                   // the raw phrase, for traceability
+  evidence:  string | null;                                   // verbatim quote the classification rests on
+  reasoning: string | null;                                   // the LLM's one-line rationale
+  note:      string | null;                                   // code-side note on how the date was derived
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,7 +37,10 @@ function isValidIso(s: string | null | undefined): s is string {
 }
 
 // Resolves an extracted delivery classification against the email's send date.
-export function resolveDelivery(delivery: Delivery | undefined | null, anchor: Date): ResolvedDelivery {
+// `defaultLeadDays`, when given, lets an explicitly flexible request (low urgency,
+// e.g. "whenever you can") be satisfied with a standard lead time instead of a
+// clarification round-trip — the requester has delegated the date to us.
+export function resolveDelivery(delivery: Delivery | undefined | null, anchor: Date, defaultLeadDays?: number): ResolvedDelivery {
   const d = delivery ?? { kind: 'none' as const, explicit_date: null, timeframe: null, urgency: null, evidence: null, reasoning: null };
   const carry = {
     kind:      d.kind,
@@ -69,7 +72,16 @@ export function resolveDelivery(delivery: Delivery | undefined | null, anchor: D
     return { ...carry, date: null, basis: 'none', note: d.timeframe ? `Could not resolve "${d.timeframe}" to a concrete date` : 'Relative delivery with no resolvable timeframe' };
   }
 
-  // urgency, none, or an explicit date that failed validation → never invent.
+  // Explicitly flexible ("whenever you can", "no rush") → the requester has
+  // delegated the timing, so apply the standard lead time rather than asking.
+  // High/normal urgency and silence never get a default — we don't guess a date
+  // the requester cares about but did not give.
+  if (d.kind === 'urgency' && d.urgency === 'low' && typeof defaultLeadDays === 'number') {
+    const date = iso(addDays(anchor, defaultLeadDays));
+    return { ...carry, date, basis: 'default', note: `Flexible request → standard lead time +${defaultLeadDays} days from ${iso(anchor)}` };
+  }
+
+  // urgency (high/normal), none, or an explicit date that failed validation → never invent.
   return { ...carry, date: null, basis: 'none', note: null };
 }
 

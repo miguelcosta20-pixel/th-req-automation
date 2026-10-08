@@ -107,7 +107,7 @@ export async function processEml(
 
     // Master-data resolution (relative delivery timeframes anchor on the email date)
     onStage?.('resolve');
-    const resolution = resolveRequisition(extraction, config.masterData, email.receivedAt);
+    const resolution = resolveRequisition(extraction, config.masterData, email.receivedAt, config.thresholds.defaultDeliveryLeadDays);
 
     // Status decision
     onStage?.('decide');

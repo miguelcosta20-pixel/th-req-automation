@@ -8,6 +8,7 @@ export interface Thresholds {
   autoConfidence: number;
   clarifyFloor: number;
   pdfPageLimit: number;
+  defaultDeliveryLeadDays: number;
 }
 
 export interface CustomerConfig {
@@ -32,6 +33,7 @@ const CustomerConfigSchema = z.object({
     autoConfidence: z.number().min(0).max(1),
     clarifyFloor: z.number().min(0).max(1),
     pdfPageLimit: z.number().int().positive(),
+    defaultDeliveryLeadDays: z.number().int().nonnegative(),
   }),
   models: z.object({
     extraction: z.string(),

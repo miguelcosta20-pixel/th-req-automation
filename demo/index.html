@@ -587,12 +587,14 @@ function deliveryCard(sol, ext) {
       ? card('Delivery requirement', `<table class="kv"><tr><td>Requested date</td><td>${esc(fmtDate(ext.delivery_date))}</td></tr></table>`)
       : '';
   }
-  const kindChip = ({
-    explicit: '<span class="chip chip-green">explicit date</span>',
-    relative: '<span class="chip chip-green">relative → resolved</span>',
-    urgency:  '<span class="chip chip-amber">urgency only</span>',
-    none:     '<span class="chip chip-gray">none stated</span>',
-  })[d.kind] || esc(d.kind);
+  const kindChip = d.basis === 'default'
+    ? '<span class="chip chip-green">flexible → default lead time</span>'
+    : (({
+        explicit: '<span class="chip chip-green">explicit date</span>',
+        relative: '<span class="chip chip-green">relative → resolved</span>',
+        urgency:  '<span class="chip chip-amber">urgency only</span>',
+        none:     '<span class="chip chip-gray">none stated</span>',
+      })[d.kind] || esc(d.kind));
   const urgencyChip = d.urgency ? `<span class="chip chip-${d.urgency==='high'?'red':'gray'}">urgency: ${esc(d.urgency)}</span>` : '';
   const dateLine = d.date
     ? `<span style="font-weight:700">${esc(fmtDate(d.date))}</span> <span style="color:#9ca3af;font-size:11px">(${esc(d.basis)})</span>`
