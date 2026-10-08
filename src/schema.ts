@@ -88,13 +88,29 @@ const ExtractionLineItemSchema = z.object({
   currency:    z.enum(SUPPORTED_CURRENCIES).nullable().optional(),
 });
 
+// Delivery requirement as understood from natural language. The LLM only
+// classifies and quotes; it never computes or invents a date. Deterministic code
+// (src/delivery.ts) turns `explicit`/`relative` into a concrete date; `urgency`
+// and `none` carry no date and route to clarification.
+export const DeliverySchema = z.object({
+  // explicit = a concrete calendar date is stated; relative = a timeframe like
+  // "next week" / "6 weeks ex works"; urgency = ASAP/urgent with no timeframe;
+  // none = nothing about delivery is said.
+  kind:          z.enum(['explicit', 'relative', 'urgency', 'none']),
+  explicit_date: z.string().nullable(),                      // ISO YYYY-MM-DD, only when kind=explicit
+  timeframe:     z.string().nullable(),                      // raw phrase for relative/urgency
+  urgency:       z.enum(['high', 'normal', 'low']).nullable(),
+  evidence:      z.string().nullable(),                      // verbatim quote the classification rests on
+  reasoning:     z.string().nullable(),                      // one sentence on how it was classified
+});
+
 export const ExtractionSchema = z.object({
   requester_name:        z.string().nullable(),
   requester_email:       z.string().nullable(),
   supplier_name:         z.string().nullable(),
   currency:              z.enum(SUPPORTED_CURRENCIES).nullable(),
   cost_centre_hint:      z.string().nullable().optional(),
-  delivery_date:         z.string().nullable().optional(),
+  delivery:              DeliverySchema.optional(),
   line_items:            z.array(ExtractionLineItemSchema),
   notes:                 z.string().nullable().optional(),
   // Populated by the LLM when it detects social-engineering / prompt-injection
@@ -106,6 +122,7 @@ export const ExtractionSchema = z.object({
 
 export type Extraction = z.infer<typeof ExtractionSchema>;
 export type ExtractionLineItem = z.infer<typeof ExtractionLineItemSchema>;
+export type Delivery = z.infer<typeof DeliverySchema>;
 
 // ── PO API request / response ─────────────────────────────────────────────────
 

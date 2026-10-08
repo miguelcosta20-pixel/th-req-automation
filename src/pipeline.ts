@@ -101,9 +101,9 @@ export async function processEml(
       };
     }
 
-    // Master-data resolution
+    // Master-data resolution (relative delivery timeframes anchor on the email date)
     onStage?.('resolve');
-    const resolution = resolveRequisition(extraction, config.masterData);
+    const resolution = resolveRequisition(extraction, config.masterData, email.receivedAt);
 
     // Status decision
     onStage?.('decide');
@@ -142,7 +142,7 @@ export async function processEml(
         costCentreCode:    resolution.costCentre?.match?.code,
         currency:          resolution.currency,
         approvalChainIds:  resolution.chain?.ok ? resolution.chain.chain.map(s => s.employeeId) : undefined,
-        hasDeliveryDate:   !!extraction.delivery_date,
+        hasDeliveryDate:   !!resolution.delivery.date,
         lineItemCount:     extraction.line_items?.length ?? 0,
       };
     }
@@ -164,7 +164,7 @@ export async function processEml(
       costCentreCode:   resolution.costCentre?.match?.code,
       currency:         resolution.currency,
       approvalChainIds: resolution.chain?.ok ? resolution.chain.chain.map(s => s.employeeId) : undefined,
-      hasDeliveryDate:  !!extraction.delivery_date,
+      hasDeliveryDate:  !!resolution.delivery.date,
       lineItemCount:    extraction.line_items?.length ?? 0,
       reasons:          decision.reasons,
       draftReply:       decision.draftReply,

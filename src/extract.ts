@@ -8,14 +8,14 @@ import type { LlmClient, LlmRequest, ContentBlock } from './llm/client';
 import type { ParsedEmail, DocumentBlock, LlmCallRecord } from './types';
 import type { Extraction } from './schema';
 
-const PROMPT_VERSION = 'extract.v1';
+const PROMPT_VERSION = 'extract.v2';
 
 // Resolved once at module load — prompts/ sits beside src/.
 const PROMPT_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
   'prompts',
-  'extract.v1.md',
+  'extract.v2.md',
 );
 
 export function loadSystemPrompt(): string {

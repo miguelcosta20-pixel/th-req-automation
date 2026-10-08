@@ -82,10 +82,20 @@ export function decide(
       detail: 'No line items found in the requisition' });
   }
 
-  // 3b. Missing delivery date
-  if (!extraction.delivery_date) {
-    reasons.push({ code: 'missing_delivery_date', queue: 'clarification',
-      detail: 'No delivery date specified' });
+  // 3b. Delivery requirement.
+  //     A usable date (explicit, or a relative timeframe resolved deterministically
+  //     against the email date) satisfies this. Pure urgency ("ASAP") or silence
+  //     yields no date — and we never invent one — so it routes to clarification.
+  const delivery = resolution.delivery;
+  if (!delivery || delivery.date == null) {
+    const urgent = delivery?.kind === 'urgency' || delivery?.urgency === 'high';
+    reasons.push({
+      code:   'missing_delivery_date',
+      queue:  'clarification',
+      detail: urgent
+        ? `Delivery urgency expressed${delivery?.timeframe ? ` ("${delivery.timeframe}")` : ''} but no concrete date — please confirm a required delivery date`
+        : 'No delivery date specified',
+    });
   }
 
   // 4. Confidence gate
@@ -121,7 +131,10 @@ function buildDraftReply(extraction: Extraction, reasons: ReviewReason[]): strin
 
   const items = reasons.map(r => {
     switch (r.code) {
-      case 'missing_delivery_date': return '• Required delivery date';
+      case 'missing_delivery_date':
+        return r.detail.includes('urgency')
+          ? '• Required delivery date (you flagged this as urgent — we will prioritise once confirmed)'
+          : '• Required delivery date';
       case 'missing_cost_centre':   return '• Cost centre (e.g. CC-1001 — Plant Maintenance)';
       case 'no_line_items':         return '• Line item details: description, quantity, and unit price';
       case 'low_confidence':        return '• Please clarify any ambiguous fields in your request';

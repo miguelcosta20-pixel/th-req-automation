@@ -3,6 +3,7 @@ import { decide } from '../src/decide';
 import type { Thresholds } from '../src/decide';
 import type { Extraction } from '../src/schema';
 import type { FullResolution } from '../src/resolve';
+import type { ResolvedDelivery } from '../src/delivery';
 import type { ApprovalStep } from '../src/approvals';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -16,13 +17,23 @@ const APPROVER: ApprovalStep = {
   role:       'department_head',
 };
 
+// A resolved delivery with a usable date (explicit); and one with no date.
+const resolvedDate: ResolvedDelivery = {
+  kind: 'explicit', date: '2026-11-15', basis: 'explicit', urgency: null,
+  timeframe: null, evidence: 'deliver by 15 Nov 2026', reasoning: null, note: null,
+};
+const noDeliveryDate: ResolvedDelivery = {
+  kind: 'none', date: null, basis: 'none', urgency: null,
+  timeframe: null, evidence: null, reasoning: null, note: null,
+};
+
 const goodExtraction: Extraction = {
   requester_name:         'Hans Meier',
   requester_email:        'hans.meier@customer.com',
   supplier_name:          'Acme Bearings GmbH',
   currency:               'EUR',
   cost_centre_hint:       'CC-1001',
-  delivery_date:          '2026-11-15',
+  delivery:               { kind: 'explicit', explicit_date: '2026-11-15', timeframe: null, urgency: null, evidence: 'deliver by 15 Nov 2026', reasoning: null },
   line_items:             [{ description: 'Ball Bearing 6204', quantity: 10, unit: 'pcs', unit_price: 12.5, price_basis: null }],
   notes:                  null,
   instructions_to_reader: null,
@@ -46,6 +57,7 @@ const goodResolution: FullResolution = {
   fxRate:           0.96,
   computedTotalChf: 120.0,
   chain:            { ok: true, chain: [APPROVER] },
+  delivery:         resolvedDate,
 };
 
 // ── Ready ─────────────────────────────────────────────────────────────────────
@@ -117,8 +129,8 @@ describe('decide — needs_human_review', () => {
 
 describe('decide — needs_clarification', () => {
   it('T61 — missing delivery date → clarification, draft reply included', () => {
-    const ext: Extraction = { ...goodExtraction, delivery_date: null };
-    const d = decide(ext, goodResolution, thresholds);
+    const res: FullResolution = { ...goodResolution, delivery: noDeliveryDate };
+    const d = decide(goodExtraction, res, thresholds);
     expect(d.status).toBe('needs_clarification');
     expect(d.reasons.some(r => r.code === 'missing_delivery_date')).toBe(true);
     expect(d.draftReply).toBeTruthy();
@@ -143,9 +155,8 @@ describe('decide — needs_clarification', () => {
   });
 
   it('T64 — missing delivery date + cost centre → clarification with both reasons', () => {
-    const ext: Extraction = { ...goodExtraction, delivery_date: null };
-    const res: FullResolution = { ...goodResolution, costCentre: null, chain: null };
-    const d = decide(ext, res, thresholds);
+    const res: FullResolution = { ...goodResolution, delivery: noDeliveryDate, costCentre: null, chain: null };
+    const d = decide(goodExtraction, res, thresholds);
     expect(d.status).toBe('needs_clarification');
     expect(d.reasons.some(r => r.code === 'missing_delivery_date')).toBe(true);
     expect(d.reasons.some(r => r.code === 'missing_cost_centre')).toBe(true);
@@ -153,8 +164,8 @@ describe('decide — needs_clarification', () => {
   });
 
   it('T65 — draft reply mentions the supplier name', () => {
-    const ext: Extraction = { ...goodExtraction, delivery_date: null };
-    const d = decide(ext, goodResolution, thresholds);
+    const res: FullResolution = { ...goodResolution, delivery: noDeliveryDate };
+    const d = decide(goodExtraction, res, thresholds);
     expect(d.draftReply).toContain('Acme Bearings GmbH');
   });
 });
@@ -163,15 +174,15 @@ describe('decide — needs_clarification', () => {
 
 describe('decide — escalation', () => {
   it('T66 — missing date (clarification) + blocked supplier (human) → human review', () => {
-    const ext: Extraction = { ...goodExtraction, delivery_date: null };
     const res: FullResolution = {
       ...goodResolution,
+      delivery: noDeliveryDate,
       supplier: {
         match: { id: 'SUP-018', name: 'Baltic Steel Trading', vat_id: null, country: 'LV', default_currency: 'EUR', payment_terms_days: 30, preferred: false, status: 'blocked' },
         score: 0.9, ambiguous: false,
       },
     };
-    const d = decide(ext, res, thresholds);
+    const d = decide(goodExtraction, res, thresholds);
     expect(d.status).toBe('needs_human_review');
   });
 });

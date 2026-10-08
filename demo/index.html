@@ -430,7 +430,7 @@ async function renderDetail(id) {
     ${summaryCard(d)}
     <div class="detail-grid">
       <div class="detail-left">${emailCard(d)}${draftCard(d)}</div>
-      <div>${extractionCard(ext)}${lineItemsCard(ext)}${masterDataCard(sol)}${chfCard(sol, ext)}${approvalChainCard(sol)}${poCard(d)}${llmCard(d.llmCalls)}</div>
+      <div>${extractionCard(ext)}${lineItemsCard(ext)}${deliveryCard(sol, ext)}${masterDataCard(sol)}${chfCard(sol, ext)}${approvalChainCard(sol)}${poCard(d)}${llmCard(d.llmCalls)}</div>
     </div>`;
 }
 
@@ -548,7 +548,6 @@ function extractionCard(ext) {
     ['Supplier', ext.supplier_name, fc.supplier_name],
     ['Currency', ext.currency, fc.currency],
     ['Cost centre', ext.cost_centre_hint, fc.cost_centre_hint],
-    ['Delivery date', ext.delivery_date ? fmtDate(ext.delivery_date) : null, fc.delivery_date],
     ['Notes', ext.notes, null],
   ];
   const hdr = 'color:#6b7280;font-weight:600;font-size:11px';
@@ -577,6 +576,36 @@ function lineItemsCard(ext) {
     <tr class="total-row"><td colspan="4" style="text-align:right;color:#6b7280">Raw total (${esc(c)})</td><td>${esc(c)} ${chf(rawTotalOf(ext))}</td></tr>
     </tbody></table>`;
   return card('Line items', body);
+}
+// Delivery requirement: the LLM's classification + evidence, and the date the
+// deterministic resolver derived (or n/a — never invented). Reads the resolved
+// delivery from the resolution; falls back to a legacy delivery_date on old rows.
+function deliveryCard(sol, ext) {
+  const d = sol?.delivery;
+  if (!d) {
+    return (ext && ext.delivery_date)
+      ? card('Delivery requirement', `<table class="kv"><tr><td>Requested date</td><td>${esc(fmtDate(ext.delivery_date))}</td></tr></table>`)
+      : '';
+  }
+  const kindChip = ({
+    explicit: '<span class="chip chip-green">explicit date</span>',
+    relative: '<span class="chip chip-green">relative → resolved</span>',
+    urgency:  '<span class="chip chip-amber">urgency only</span>',
+    none:     '<span class="chip chip-gray">none stated</span>',
+  })[d.kind] || esc(d.kind);
+  const urgencyChip = d.urgency ? `<span class="chip chip-${d.urgency==='high'?'red':'gray'}">urgency: ${esc(d.urgency)}</span>` : '';
+  const dateLine = d.date
+    ? `<span style="font-weight:700">${esc(fmtDate(d.date))}</span> <span style="color:#9ca3af;font-size:11px">(${esc(d.basis)})</span>`
+    : '<span style="color:#9ca3af">no date — not invented</span>';
+  return card('Delivery requirement', `
+    <table class="kv">
+      <tr><td>Classification</td><td>${kindChip} ${urgencyChip}</td></tr>
+      <tr><td>Requested date</td><td>${dateLine}</td></tr>
+      ${d.timeframe ? `<tr><td>Stated as</td><td>${esc(d.timeframe)}</td></tr>` : ''}
+      ${d.evidence ? `<tr><td>Evidence</td><td style="color:#6b7280">“${esc(d.evidence)}”</td></tr>` : ''}
+      ${d.reasoning ? `<tr><td>Reasoning</td><td style="color:#6b7280">${esc(d.reasoning)}</td></tr>` : ''}
+      ${d.note ? `<tr><td>Resolution</td><td style="color:#6b7280;font-size:11px">${esc(d.note)}</td></tr>` : ''}
+    </table>`);
 }
 function matchPill(r) { return r?.match ? `<span class="chip chip-gray">match ${Math.round((r.score ?? 0)*100)}%</span>` : ''; }
 function masterDataCard(sol) {

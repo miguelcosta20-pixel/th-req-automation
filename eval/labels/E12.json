@@ -6,11 +6,11 @@
     "supplier_id": "SUP-020",
     "cost_centre_code": "CC-2001",
     "currency": "EUR",
-    "has_delivery_date": false,
+    "has_delivery_date": true,
     "min_line_items": 1,
     "total_chf_range": [35000, 45000],
     "approval_chain_ids": null
   },
   "verify_after_run": true,
-  "notes": "Sophie Dubois forwards a 3-hop chain; actual quote from Jeroen Bakker (Zenith Automation BV). Delivery is '6 weeks ex works' — relative, not extractable as ISO date. EUR 41200 × 0.96 = CHF 39552. May be needs_clarification if LLM resolves to high confidence despite the chain. Update after first run."
+  "notes": "Sophie Dubois forwards a 3-hop chain; actual quote from Jeroen Bakker (Zenith Automation BV). Delivery is '6 weeks ex works' — now RESOLVED as a relative date (anchored on the email date) rather than bounced, so has_delivery_date is true. EUR 41200 × 0.96 = CHF 39552. Status may shift from needs_human_review toward clarification/submitted now the date resolves and depending on LLM confidence for the forwarded provenance. Re-verify after a run."
 }

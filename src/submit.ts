@@ -20,6 +20,9 @@ export async function submitPO(
   const supplier = resolution.supplier?.match;
   if (!supplier) throw new Error('submitPO called without a resolved supplier');
 
+  const deliveryDate = resolution.delivery?.date;
+  if (!deliveryDate) throw new Error('submitPO called without a resolved delivery date');
+
   const lineItems = (extraction.line_items ?? [])
     .filter(item => item.description && item.quantity != null && item.unit_price != null)
     .map(item => ({
@@ -33,7 +36,7 @@ export async function submitPO(
     supplier_id:             supplier.id,
     currency:                resolution.currency,
     total:                   resolution.computedTotalChf,
-    requested_delivery_date: extraction.delivery_date!,
+    requested_delivery_date: deliveryDate,
     line_items:              lineItems,
     cost_centre:             resolution.costCentre?.match?.code,
     requisition_reference:   idempotencyKey.slice(0, 40),

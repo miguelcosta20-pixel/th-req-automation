@@ -23,7 +23,7 @@ const cleanExtraction: Extraction = {
   supplier_name:          'Acme Bearings GmbH',
   currency:               'EUR',
   cost_centre_hint:       'CC-1001',
-  delivery_date:          '2026-11-20',
+  delivery:               { kind: 'explicit', explicit_date: '2026-11-20', timeframe: null, urgency: null, evidence: 'by 20 Nov', reasoning: null },
   line_items:             [{ description: 'Bearing 6204', quantity: 20, unit: 'pcs', unit_price: 8.5, price_basis: null }],
   notes:                  null,
   instructions_to_reader: null,
@@ -45,6 +45,7 @@ const cleanResolution: FullResolution = {
   },
   currency: 'EUR', fxRate: 0.96, computedTotalChf: 163.2,
   chain: { ok: true, chain: [{ employeeId: 'EMP-501', name: 'Andrea Roth', email: 'andrea.roth@customer.com', role: 'department_head' }] },
+  delivery: { kind: 'explicit', date: '2026-11-20', basis: 'explicit', urgency: null, timeframe: null, evidence: 'by 20 Nov', reasoning: null, note: null },
 };
 
 describe('prompt-injection defence', () => {
