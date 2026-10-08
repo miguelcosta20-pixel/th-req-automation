@@ -28,6 +28,14 @@ export interface ResolvedDelivery {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+// True only for a well-formed, real calendar date in YYYY-MM-DD form
+// (rejects "30/06/2026", "2026-13-45", "2026-02-30", etc.).
+function isValidIso(s: string | null | undefined): s is string {
+  if (!s || !ISO_DATE.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
 // Resolves an extracted delivery classification against the email's send date.
 export function resolveDelivery(delivery: Delivery | undefined | null, anchor: Date): ResolvedDelivery {
   const d = delivery ?? { kind: 'none' as const, explicit_date: null, timeframe: null, urgency: null, evidence: null, reasoning: null };
@@ -39,15 +47,26 @@ export function resolveDelivery(delivery: Delivery | undefined | null, anchor: D
     reasoning: d.reasoning ?? null,
   };
 
-  if (d.kind === 'explicit' && d.explicit_date && ISO_DATE.test(d.explicit_date)) {
+  if (d.kind === 'explicit' && isValidIso(d.explicit_date)) {
     return { ...carry, date: d.explicit_date, basis: 'explicit', note: null };
   }
 
-  if (d.kind === 'relative' && d.timeframe) {
-    const resolved = resolveRelative(d.timeframe, anchor);
-    if (resolved) return { ...carry, date: resolved.date, basis: 'relative', note: resolved.note };
-    // Relative but not parseable to a date — do not invent one.
-    return { ...carry, date: null, basis: 'none', note: `Could not resolve "${d.timeframe}" to a concrete date` };
+  if (d.kind === 'relative') {
+    // Prefer the model's resolved date when it is a valid ISO date that is not
+    // before the email was sent (the prompt resolves phrases like "Bis Ende Mai"
+    // the English-only parser below cannot). The non-past guard catches model
+    // resolution slips (e.g. the wrong year).
+    const anchorIso = iso(anchor);
+    if (isValidIso(d.explicit_date) && d.explicit_date >= anchorIso) {
+      return { ...carry, date: d.explicit_date, basis: 'relative', note: `Model-resolved "${d.timeframe ?? ''}" → ${d.explicit_date}` };
+    }
+    // Otherwise fall back to the deterministic parser on the raw phrase.
+    if (d.timeframe) {
+      const resolved = resolveRelative(d.timeframe, anchor);
+      if (resolved) return { ...carry, date: resolved.date, basis: 'relative', note: resolved.note };
+    }
+    // Relative but no date could be derived — do not invent one.
+    return { ...carry, date: null, basis: 'none', note: d.timeframe ? `Could not resolve "${d.timeframe}" to a concrete date` : 'Relative delivery with no resolvable timeframe' };
   }
 
   // urgency, none, or an explicit date that failed validation → never invent.

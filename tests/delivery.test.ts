@@ -56,6 +56,19 @@ describe('resolveDelivery', () => {
     expect(r).toMatchObject({ date: '2026-05-21', basis: 'relative' });
     expect(r.note).toContain('next week');
   });
+  it('T90a — model-resolved explicit_date on a relative is trusted (phrase the parser cannot handle)', () => {
+    const r = resolveDelivery(delivery({ kind: 'relative', timeframe: 'Bis Ende Mai', explicit_date: '2026-05-31' }), ANCHOR);
+    expect(r).toMatchObject({ date: '2026-05-31', basis: 'relative' });
+    expect(r.note).toContain('Model-resolved');
+  });
+  it('T90b — model date before the email date is rejected, parser used instead', () => {
+    const r = resolveDelivery(delivery({ kind: 'relative', timeframe: 'next week', explicit_date: '2020-01-01' }), ANCHOR);
+    expect(r.date).toBe('2026-05-21');   // fell back to the parser, not the past date
+  });
+  it('T90c — malformed model date on a relative falls back to the parser', () => {
+    const r = resolveDelivery(delivery({ kind: 'relative', timeframe: 'in 10 days', explicit_date: '31/05/2026' }), ANCHOR);
+    expect(r.date).toBe('2026-05-24');
+  });
   it('T91 — relative but unparseable → no date, note explains', () => {
     const r = resolveDelivery(delivery({ kind: 'relative', timeframe: 'whenever is convenient' }), ANCHOR);
     expect(r.date).toBeNull();
