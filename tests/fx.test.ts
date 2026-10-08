@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { convertToChf } from '../src/fx';
+import { convertToChf } from '../src/resolution/fx';
 
 // Rates mirror master_data.json; used inline so tests are self-contained.
 const rates = { CHF: 1.0, EUR: 0.96, USD: 0.88, GBP: 1.13 };

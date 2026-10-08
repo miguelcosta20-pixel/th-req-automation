@@ -1,6 +1,6 @@
-import type { Extraction } from './schema';
-import type { FullResolution } from './resolve';
-import type { Decision, ReviewReason } from './types';
+import type { Extraction } from '../schema';
+import type { FullResolution } from '../resolution/resolve';
+import type { Decision, ReviewReason } from '../types';
 
 export interface Thresholds {
   autoConfidence: number;

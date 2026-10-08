@@ -26,7 +26,7 @@ import { loadConfig } from './config.js';
 import { initDb } from './db.js';
 import { AnthropicClient } from './llm/anthropic.js';
 import { processEml } from './pipeline.js';
-import { ingestEml } from './ingest.js';
+import { ingestEml } from './ingest/ingest.js';
 
 const PORT       = parseInt(process.env.DEMO_PORT ?? '3000', 10);
 const ROOT       = process.cwd();

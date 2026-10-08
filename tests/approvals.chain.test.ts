@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildApprovalChain, ROLE_LEVEL } from '../src/approvals';
+import { buildApprovalChain, ROLE_LEVEL } from '../src/resolution/approvals';
 import type { ApprovalBand, CostCentre, Department, Employee } from '../src/schema';
 
 // ── Fixture ──────────────────────────────────────────────────────────────────

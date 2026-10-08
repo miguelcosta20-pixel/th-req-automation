@@ -1,6 +1,6 @@
-import { PoRequestSchema, PoResponseSchema } from './schema';
-import type { Extraction, PoResponse } from './schema';
-import type { FullResolution } from './resolve';
+import { PoRequestSchema, PoResponseSchema } from '../schema';
+import type { Extraction, PoResponse } from '../schema';
+import type { FullResolution } from '../resolution/resolve';
 
 export interface SubmitResult {
   poNumber:  string;

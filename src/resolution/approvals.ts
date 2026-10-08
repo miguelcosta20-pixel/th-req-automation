@@ -1,4 +1,4 @@
-import type { ApprovalBand, CostCentre, Department, Employee } from './schema';
+import type { ApprovalBand, CostCentre, Department, Employee } from '../schema';
 
 // Role seniority (higher number = higher authority). Kept as the documented
 // hierarchy and asserted by tests; the chain builder no longer uses it for a

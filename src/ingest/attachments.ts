@@ -1,4 +1,4 @@
-import type { ParsedAttachment, DocumentBlock } from './types';
+import type { ParsedAttachment, DocumentBlock } from '../types';
 
 export interface AttachmentSelection {
   documentBlocks: DocumentBlock[];

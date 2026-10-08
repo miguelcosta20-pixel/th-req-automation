@@ -10,10 +10,10 @@
 // actually capturing the injection) requires an integration test with a live model.
 
 import { describe, it, expect } from 'vitest';
-import { decide } from '../src/decide';
-import type { Thresholds } from '../src/decide';
+import { decide } from '../src/decision/decide';
+import type { Thresholds } from '../src/decision/decide';
 import type { Extraction } from '../src/schema';
-import type { FullResolution } from '../src/resolve';
+import type { FullResolution } from '../src/resolution/resolve';
 
 const thresholds: Thresholds = { autoConfidence: 0.80, clarifyFloor: 0.50 };
 

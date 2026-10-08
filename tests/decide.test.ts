@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { decide } from '../src/decide';
-import type { Thresholds } from '../src/decide';
+import { decide } from '../src/decision/decide';
+import type { Thresholds } from '../src/decision/decide';
 import type { Extraction } from '../src/schema';
-import type { FullResolution } from '../src/resolve';
-import type { ResolvedDelivery } from '../src/delivery';
-import type { ApprovalStep } from '../src/approvals';
+import type { FullResolution } from '../src/resolution/resolve';
+import type { ResolvedDelivery } from '../src/resolution/delivery';
+import type { ApprovalStep } from '../src/resolution/approvals';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

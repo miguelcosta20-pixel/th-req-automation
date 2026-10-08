@@ -4,12 +4,12 @@ import type Database from 'better-sqlite3';
 import type { LlmClient } from './llm/client';
 import type { AppConfig } from './config';
 import type { ProcessResult } from './types';
-import { ingestEml } from './ingest';
-import { selectAttachments } from './attachments';
-import { extractFromEmail, loadSystemPrompt } from './extract';
-import { resolveRequisition } from './resolve';
-import { decide } from './decide';
-import { submitPO } from './submit';
+import { ingestEml } from './ingest/ingest';
+import { selectAttachments } from './ingest/attachments';
+import { extractFromEmail, loadSystemPrompt } from './extraction/extract';
+import { resolveRequisition } from './resolution/resolve';
+import { decide } from './decision/decide';
+import { submitPO } from './output/submit';
 import {
   upsertRequisition,
   updateRequisitionStatus,
@@ -17,7 +17,7 @@ import {
   insertReviewItems,
   insertPO,
   markRequisitionFailed,
-} from './audit';
+} from './output/audit';
 
 interface RunDeps {
   db:     Database.Database;

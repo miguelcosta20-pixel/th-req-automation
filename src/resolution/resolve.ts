@@ -1,5 +1,5 @@
 import Fuse, { type FuseResult } from 'fuse.js';
-import type { Supplier, CostCentre, Employee, GlAccount, MasterData, Extraction } from './schema';
+import type { Supplier, CostCentre, Employee, GlAccount, MasterData, Extraction } from '../schema';
 import { convertToChf } from './fx';
 import { buildApprovalChain } from './approvals';
 import type { ChainResult } from './approvals';

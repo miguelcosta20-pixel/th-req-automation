@@ -2,16 +2,16 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, basename } from 'path';
 import { createHash } from 'crypto';
-import { ExtractionSchema } from './schema';
-import { computeCostChf } from './llm/pricing';
-import type { LlmClient, LlmRequest, ContentBlock } from './llm/client';
-import type { ParsedEmail, DocumentBlock, LlmCallRecord } from './types';
-import type { Extraction } from './schema';
+import { ExtractionSchema } from '../schema';
+import { computeCostChf } from '../llm/pricing';
+import type { LlmClient, LlmRequest, ContentBlock } from '../llm/client';
+import type { ParsedEmail, DocumentBlock, LlmCallRecord } from '../types';
+import type { Extraction } from '../schema';
 
-// Resolved once at module load — prompts/ sits beside src/.
+// Resolved once at module load — prompts/ sits two levels above src/extraction/.
 const PROMPT_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
-  '..',
+  '../..',
   'prompts',
   'extract.v2.md',
 );

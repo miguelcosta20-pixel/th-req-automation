@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { describe, it, expect } from 'vitest';
-import { findBand } from '../src/approvals';
+import { findBand } from '../src/resolution/approvals';
 import type { ApprovalBand } from '../src/schema';
 
 // Boundary cases live in a shared fixture so the demo Rules screen and this test

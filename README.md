@@ -96,6 +96,22 @@ Customer config lives in `config/toastwerk/config.json`. A second customer is a 
 5. **Decide** — route to `submitted`, `needs_clarification`, `needs_human_review`, or `security`
 6. **Submit** — POST to the mock PO API; record everything in the SQLite audit log
 
+## src layout
+
+```
+src/
+  pipeline.ts       top-level orchestrator
+  cli.ts / demo.ts / eval.ts / eval-core.ts   entry points
+  types.ts / schema.ts / config.ts / db.ts    shared foundations
+
+  ingest/           email parsing (ingest.ts) and PDF attachment handling (attachments.ts)
+  extraction/       LLM extraction call and response parsing (extract.ts)
+  resolution/       master-data matching: resolve.ts, approvals.ts, delivery.ts, fx.ts
+  decision/         routing logic (decide.ts)
+  output/           PO API call (submit.ts) and SQLite audit log (audit.ts)
+  llm/              LLM client interface, Anthropic adapter, token pricing
+```
+
 ## Assumptions
 
 These are documented in full in [docs/decisions.md](docs/decisions.md). Short version:

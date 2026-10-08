@@ -1,6 +1,6 @@
 import { simpleParser } from 'mailparser';
 import { createHash } from 'crypto';
-import type { ParsedEmail, ParsedAttachment } from './types';
+import type { ParsedEmail, ParsedAttachment } from '../types';
 
 export async function ingestEml(raw: string | Buffer): Promise<ParsedEmail> {
   const parsed = await simpleParser(raw, { skipTextToHtml: false });

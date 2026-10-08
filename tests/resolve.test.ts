@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { MasterDataSchema } from '../src/schema';
-import { resolveSupplier, resolveCostCentre, resolveEmployee, resolveGlAccount } from '../src/resolve';
+import { resolveSupplier, resolveCostCentre, resolveEmployee, resolveGlAccount } from '../src/resolution/resolve';
 import type { MasterData } from '../src/schema';
 
 // Real master data — resolve tests exercise the actual data quality issues

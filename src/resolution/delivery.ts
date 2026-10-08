@@ -13,7 +13,7 @@
 // relative timeframe anchored to the email date. Urgency and silence yield null,
 // which routes the requisition to clarification downstream.
 
-import type { Delivery } from './schema';
+import type { Delivery } from '../schema';
 
 export interface ResolvedDelivery {
   kind:      'explicit' | 'relative' | 'urgency' | 'none';

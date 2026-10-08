@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveDelivery, resolveRelative } from '../src/delivery';
+import { resolveDelivery, resolveRelative } from '../src/resolution/delivery';
 import type { Delivery } from '../src/schema';
 
 // Anchor: a fixed email send date so relative resolution is deterministic.

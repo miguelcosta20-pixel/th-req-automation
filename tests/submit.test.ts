@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPoLines } from '../src/submit';
+import { buildPoLines } from '../src/output/submit';
 import type { Extraction } from '../src/schema';
 
 // buildPoLines only reads line_items; build a minimal extraction for each case.

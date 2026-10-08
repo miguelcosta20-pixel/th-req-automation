@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type Database from 'better-sqlite3';
 import { initDb } from '../src/db';
-import { upsertRequisition, markRequisitionFailed, insertReviewItems } from '../src/audit';
+import { upsertRequisition, markRequisitionFailed, insertReviewItems } from '../src/output/audit';
 import type { ParsedEmail } from '../src/types';
 
 function email(messageId: string): ParsedEmail {

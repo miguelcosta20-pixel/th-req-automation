@@ -1,8 +1,8 @@
 import type Database from 'better-sqlite3';
-import type { ParsedEmail } from './types';
-import type { Extraction } from './schema';
-import type { FullResolution } from './resolve';
-import type { LlmCallRecord, ReviewReason } from './types';
+import type { ParsedEmail } from '../types';
+import type { Extraction } from '../schema';
+import type { FullResolution } from '../resolution/resolve';
+import type { LlmCallRecord, ReviewReason } from '../types';
 import type { SubmitResult } from './submit';
 
 // ── Requisition ───────────────────────────────────────────────────────────────
