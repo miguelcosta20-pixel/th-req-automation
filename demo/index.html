@@ -149,6 +149,28 @@ details.sec[open] > summary .caret { transform: rotate(90deg); }
 details.sec[open] > summary .sec-oneline { display: none; }
 details.sec .sec-content { padding: 18px; }
 
+/* ── PO Form Fields ─────────────────────────────────────────────── */
+.po-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.po-section { background: #f8fafc; padding: 14px; border-radius: 6px; border-left: 3px solid #cbd5e1; }
+.po-section.modified { border-left-color: #f59e0b; background: #fffbeb; }
+.po-section-title { font-weight: 600; font-size: 12px; text-transform: uppercase; color: #1e293b; margin-bottom: 12px; letter-spacing: .04em; }
+.po-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.po-field:last-child { margin-bottom: 0; }
+.po-field label { font-size: 12px; font-weight: 500; color: #374151; display: flex; align-items: center; gap: 6px; }
+.po-field label .mandatory { color: #ef4444; font-weight: 700; }
+.po-field label .source { font-size: 10px; color: #6b7280; font-weight: 400; margin-left: auto; padding: 0 4px; border-radius: 3px; }
+.po-field label .source.auto { background: #dbeafe; color: #0369a1; }
+.po-field label .source.manual { background: #fed7aa; color: #7c2d12; }
+.po-field input, .po-field select, .po-field textarea { padding: 7px 10px; font-size: 12px; border: 1px solid #d1d5db; border-radius: 4px; font-family: inherit; }
+.po-field input:focus, .po-field select:focus, .po-field textarea:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
+.po-field .conf-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #6b7280; }
+.po-field .empty-val { color: #9ca3af; font-style: italic; }
+.po-items-list { margin-top: 8px; }
+.po-item { background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; margin-bottom: 8px; font-size: 12px; }
+.po-item-row { display: grid; grid-template-columns: 1fr 80px 80px 60px; gap: 8px; align-items: end; }
+.po-item-row input { padding: 5px 7px; font-size: 11px; }
+.po-item-header { font-weight: 500; color: #1e293b; margin-bottom: 6px; }
+
 /* ── Match check row ────────────────────────────────────────────── */
 .check-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
 .check-row.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
@@ -430,7 +452,7 @@ async function renderDetail(id) {
     ${summaryCard(d)}
     <div class="detail-grid">
       <div class="detail-left">${emailCard(d)}${draftCard(d)}</div>
-      <div>${extractionCard(ext)}${lineItemsCard(ext)}${deliveryCard(sol, ext)}${masterDataCard(sol)}${chfCard(sol, ext)}${approvalChainCard(sol)}${poCard(d)}${llmCard(d.llmCalls)}</div>
+      <div>${poFormCard(d, ext, sol)}${llmCard(d.llmCalls)}</div>
     </div>`;
 }
 
@@ -684,6 +706,112 @@ function poCard(d) {
     ${warnings.length ? `<div style="margin-top:10px">${warnings.map(w=>`<div style="font-size:12px;color:#92400e">⚠ ${esc(w)}</div>`).join('')}</div>` : ''}
   `);
 }
+
+// Comprehensive PO form — consolidated extraction + resolution + editable PO fields
+function poFormCard(d, ext, sol) {
+  if (!ext || !sol) return card('PO', '<div style="color:#9ca3af">Incomplete data.</div>');
+
+  const fc = ext.field_confidence || {};
+  const conf = (val) => val != null ? confBar(val) : '';
+  const source = (val, conf) => val != null && val !== '' ? `<span class="source ${conf === undefined || conf === null ? 'auto' : conf > 0.7 ? 'auto' : 'manual'}">extracted</span>` : '';
+  const empty = (val) => val == null || val === '' ? '<span class="empty-val">empty</span>' : esc(val);
+
+  const supplier = sol.supplier?.match;
+  const costCentre = sol.costCentre?.match;
+  const glAccount = sol.glAccount?.match;
+  const delivery = sol.delivery;
+  const items = ext.line_items || [];
+  const rawTotal = rawTotalOf(ext);
+  const chfTotal = sol.computedTotalChf;
+
+  const poNum = d.po?.po_number;
+  const poTotal = d.po?.total_chf;
+
+  return card('Purchase Order Details', `
+    <div class="po-form">
+      <!-- Supplier & Currency -->
+      <div class="po-section">
+        <div class="po-section-title">Supplier & Currency</div>
+        <div class="po-field">
+          <label>Supplier <span class="mandatory">*</span> <span class="source auto">from AI</span></label>
+          <div>${supplier ? `<strong>${esc(supplier.name)}</strong><br><span style="font-size:11px;color:#6b7280">${esc(supplier.id)}</span>` : '<span class="empty-val">not resolved</span>'}</div>
+          <div class="conf-badge">${conf(fc.supplier_name)}</div>
+        </div>
+        <div class="po-field">
+          <label>Currency <span class="mandatory">*</span></label>
+          <select>${['CHF','EUR','USD','GBP'].map(c => `<option ${c === (ext.currency || 'CHF') ? 'selected' : ''}>${c}</option>`).join('')}</select>
+        </div>
+      </div>
+
+      <!-- Delivery -->
+      <div class="po-section">
+        <div class="po-section-title">Delivery</div>
+        <div class="po-field">
+          <label>Requested Date <span class="mandatory">*</span></label>
+          <input type="date" value="${delivery?.date ? delivery.date.split('T')[0] : ''}" />
+          <div class="conf-badge" style="font-size:10px;color:#6b7280">${delivery ? delivery.basis ? `${delivery.basis}` : 'resolved' : 'n/a'}</div>
+        </div>
+      </div>
+
+      <!-- Cost Centre & GL -->
+      <div class="po-section">
+        <div class="po-section-title">Finance</div>
+        <div class="po-field">
+          <label>Cost Centre <span class="mandatory">*</span></label>
+          <div>${costCentre ? `<strong>${esc(costCentre.code)}</strong> ${esc(costCentre.name)}` : '<span class="empty-val">not resolved</span>'}</div>
+        </div>
+        <div class="po-field">
+          <label>GL Account <span style="font-size:10px;color:#6b7280">(advisory)</span></label>
+          <div>${glAccount ? `<strong>${esc(glAccount.code)}</strong> ${esc(glAccount.name)}` : '<span class="empty-val">auto-determined by ERP</span>'}</div>
+        </div>
+      </div>
+
+      <!-- Totals -->
+      <div class="po-section">
+        <div class="po-section-title">Totals</div>
+        <div class="po-field">
+          <label style="display:block;margin-bottom:6px">Original Total</label>
+          <div class="mono" style="font-size:13px;font-weight:600">${(ext.currency || 'CHF')} ${num(rawTotal)}</div>
+        </div>
+        <div class="po-field">
+          <label style="display:block;margin-bottom:6px">CHF Total (approval)</label>
+          <div class="mono" style="font-size:13px;font-weight:600">CHF ${chf(chfTotal)}</div>
+        </div>
+        ${poNum ? `<div class="po-field" style="margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px">
+          <label style="display:block;margin-bottom:6px">✓ Submitted</label>
+          <div class="mono" style="font-size:13px;color:#166534;font-weight:600">${esc(poNum)}</div>
+          <div class="mono" style="font-size:12px;color:#6b7280">CHF ${chf(poTotal)}</div>
+        </div>` : ''}
+      </div>
+    </div>
+
+    <div style="margin-top:16px;padding:14px;background:#f0fdf4;border:1px solid #dcfce7;border-radius:6px">
+      <div style="font-weight:600;font-size:12px;color:#166534;margin-bottom:8px">Line Items (${items.length})</div>
+      <div class="po-items-list">
+        ${items.map((item, i) => `
+          <div class="po-item">
+            <div class="po-item-header">${esc(item.description || 'Unnamed item')} <span class="conf-badge">${confBar(fc.line_items?.[i]?.quantity ?? 0.8)}</span></div>
+            <div class="po-item-row">
+              <div><label style="font-size:11px;color:#6b7280">QTY ${item.quantity != null ? `✓` : '?'}</label></div>
+              <div><label style="font-size:11px;color:#6b7280">@</label></div>
+              <div><label style="font-size:11px;color:#6b7280">Price</label></div>
+              <div><label style="font-size:11px;color:#6b7280">Total</label></div>
+            </div>
+            <div class="po-item-row">
+              <div>${item.quantity != null ? item.quantity : '—'} ${item.unit || '?'}</div>
+              <div>${(ext.currency || 'CHF')}</div>
+              <div>${item.unit_price != null ? num(item.unit_price) : '—'}</div>
+              <div style="font-weight:600">${item.quantity != null && item.unit_price != null ? num(item.quantity * item.unit_price) : '—'}</div>
+            </div>
+            ${item.item_code ? `<div style="margin-top:6px;font-size:11px;color:#6b7280">Code: <span class="mono">${esc(item.item_code)}</span></div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `);
+}
+
+function num(n) { return typeof n === 'number' ? n.toFixed(2) : '—'; }
 function llmCard(calls) {
   if (!calls || !calls.length) return '';
   return card('LLM calls', `<table class="data-table"><thead><tr><th>Attempt</th><th>Model</th><th>Prompt</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost CHF</th><th class="num">Latency</th><th>OK</th></tr></thead><tbody>
