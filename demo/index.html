@@ -50,12 +50,16 @@ select { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 10px; font-
 .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 20px; font-weight: 700; font-size: 12px; letter-spacing: .02em; white-space: nowrap; }
 .status-submitted           { background: #dcfce7; color: #166534; }
 .status-ready               { background: #dcfce7; color: #166534; }
-.status-needs_clarification { background: #fef9c3; color: #92400e; }
+.status-needs_clarification { background: #ffedd5; color: #9a3412; }
 .status-needs_human_review  { background: #ffedd5; color: #9a3412; }
 .status-security            { background: #fee2e2; color: #991b1b; }
 .status-failed              { background: #f3f4f6; color: #4b5563; }
 .status-duplicate           { background: #ede9fe; color: #5b21b6; }
 .status-processing          { background: #e0f2fe; color: #075985; }
+.status-waiting_approval    { background: #fef9c3; color: #92400e; }
+.status-ready_to_submit     { background: #dcfce7; color: #166534; }
+.status-rejected            { background: #fee2e2; color: #991b1b; }
+.status-approved            { background: #dcfce7; color: #166534; }
 
 /* ── Chips ──────────────────────────────────────────────────────── */
 .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
@@ -80,6 +84,7 @@ input.search:focus { border-color: #6366f1; }
 .appr-approved { background: #dcfce7; color: #166534; }
 .appr-rejected { background: #fee2e2; color: #991b1b; }
 .appr-alt      { background: #fef9c3; color: #92400e; }
+.appr-invalid  { background: #f3f4f6; color: #d1d5db; text-decoration: line-through; }
 td.po-col { white-space: nowrap; min-width: 140px; }
 
 /* ── Confidence bar ─────────────────────────────────────────────── */
@@ -118,7 +123,7 @@ mark.flagged { background: #fecaca; color: #7f1d1d; padding: 0 2px; border-radiu
 /* ── Summary card ───────────────────────────────────────────────── */
 .summary { border-left: 4px solid #6366f1; }
 .summary.sev-submitted, .summary.sev-duplicate { border-left-color: #22c55e; }
-.summary.sev-needs_clarification { border-left-color: #eab308; }
+.summary.sev-needs_clarification { border-left-color: #f97316; }
 .summary.sev-needs_human_review { border-left-color: #f97316; }
 .summary.sev-security, .summary.sev-failed { border-left-color: #ef4444; }
 .summary-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
@@ -138,6 +143,30 @@ mark.flagged { background: #fecaca; color: #7f1d1d; padding: 0 2px; border-radiu
 .btn-reject { background: #fff; color: #b91c1c; border: 1px solid #fca5a5; } .btn-reject:hover { background: #fef2f2; }
 #action-note { margin-top: 10px; font-size: 12px; }
 
+/* ── Detail header (simple CTA bar for actionable states) ────────── */
+.detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding: 14px 20px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.detail-header-meta { flex: 1 1 200px; }
+.detail-header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.detail-header-total { text-align: right; }
+.detail-header-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+/* Force consistent height across ghost + primary buttons in the action row */
+.detail-header-actions > button { height: 36px; padding: 0 16px; }
+.btn-submit-appr { background: #6366f1; color: #fff; border: none; border-radius: 5px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.btn-submit-appr:hover:not(:disabled) { background: #4f46e5; }
+.btn-submit-appr:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Tooltip on disabled submit button — shown via wrapper span */
+#submit-btn-wrap { position: relative; display: inline-block; }
+#submit-btn-wrap[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 6px); right: 0;
+  background: #1f2937; color: #f9fafb; font-size: 11px; white-space: nowrap;
+  padding: 5px 9px; border-radius: 4px; pointer-events: none; z-index: 50;
+}
+#submit-btn-wrap[data-tip]:hover::before {
+  content: ''; position: absolute; bottom: calc(100% + 1px); right: 14px;
+  border: 5px solid transparent; border-top-color: #1f2937; pointer-events: none; z-index: 50;
+}
+
 /* ── Collapsible sections ───────────────────────────────────────── */
 details.sec { background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
 details.sec > summary { padding: 11px 18px; cursor: pointer; list-style: none; border-left: 3px solid #6366f1; background: #f8fafc; display: flex; align-items: center; gap: 10px; }
@@ -149,27 +178,59 @@ details.sec[open] > summary .caret { transform: rotate(90deg); }
 details.sec[open] > summary .sec-oneline { display: none; }
 details.sec .sec-content { padding: 18px; }
 
-/* ── PO Form Fields ─────────────────────────────────────────────── */
-.po-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-.po-section { background: #f8fafc; padding: 14px; border-radius: 6px; border-left: 3px solid #cbd5e1; }
-.po-section.modified { border-left-color: #f59e0b; background: #fffbeb; }
-.po-section-title { font-weight: 600; font-size: 12px; text-transform: uppercase; color: #1e293b; margin-bottom: 12px; letter-spacing: .04em; }
-.po-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
-.po-field:last-child { margin-bottom: 0; }
-.po-field label { font-size: 12px; font-weight: 500; color: #374151; display: flex; align-items: center; gap: 6px; }
-.po-field label .mandatory { color: #ef4444; font-weight: 700; }
-.po-field label .source { font-size: 10px; color: #6b7280; font-weight: 400; margin-left: auto; padding: 0 4px; border-radius: 3px; }
-.po-field label .source.auto { background: #dbeafe; color: #0369a1; }
-.po-field label .source.manual { background: #fed7aa; color: #7c2d12; }
-.po-field input, .po-field select, .po-field textarea { padding: 7px 10px; font-size: 12px; border: 1px solid #d1d5db; border-radius: 4px; font-family: inherit; }
-.po-field input:focus, .po-field select:focus, .po-field textarea:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
-.po-field .conf-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #6b7280; }
-.po-field .empty-val { color: #9ca3af; font-style: italic; }
-.po-items-list { margin-top: 8px; }
-.po-item { background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; margin-bottom: 8px; font-size: 12px; }
-.po-item-row { display: grid; grid-template-columns: 1fr 80px 80px 60px; gap: 8px; align-items: end; }
-.po-item-row input { padding: 5px 7px; font-size: 11px; }
-.po-item-header { font-weight: 500; color: #1e293b; margin-bottom: 6px; }
+/* ── AI chips ───────────────────────────────────────────────────── */
+.ai-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 16px; font-size: 12px; font-weight: 500; cursor: default; border: 1px solid transparent; max-width: 100%; overflow: hidden; flex-shrink: 0; }
+.ai-chip-plain  { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.ai-chip-warn   { background: #fef9c3; color: #92400e; border-color: #fde68a; }
+.ai-chip-alert  { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+/* Double-sparkle icon: two ✦ glyphs, bigger top-left + smaller bottom-right */
+.ai-spark { position: relative; display: inline-block; width: 14px; height: 11px; flex-shrink: 0; vertical-align: -1px; }
+.sp-big { position: absolute; top: 0; left: 0; font-size: 10px; line-height: 1; }
+.sp-sm  { position: absolute; bottom: 0; right: 0; font-size: 6px; line-height: 1; opacity: 0.75; }
+.ai-chip .chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-conf { display: none; } /* confidence is now shown via title tooltip only */
+/* ⚠ icon at chip end — visible on warn chips to prompt hover */
+.ai-warn-icon { font-size: 9px; flex-shrink: 0; margin-left: 1px; opacity: 0.85; }
+.ai-chip-remove { background: none; border: none; cursor: pointer; color: inherit; opacity: 0.5; font-size: 14px; padding: 0 0 0 3px; line-height: 1; flex-shrink: 0; }
+.ai-chip-remove:hover { opacity: 1; background: none; }
+
+/* ── Field box: input that visually contains an AI chip ─────────── */
+/* Looks like a normal input. When AI value present, shows chip; plain text input otherwise. */
+.field-box { display: flex; align-items: center; flex-wrap: nowrap; gap: 4px; padding: 4px 8px; min-height: 32px; border: 1px solid #d1d5db; border-radius: 5px; background: #fff; cursor: text; box-sizing: border-box; width: 100%; overflow: hidden; }
+.field-box:focus-within { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
+.field-box input { border: none; outline: none; flex: 1; min-width: 40px; width: 0; font-size: 13px; color: #111827; background: transparent; font-family: inherit; padding: 0; }
+/* Compact variant for table cells */
+.li-td .field-box { min-height: 26px; padding: 2px 5px; }
+.li-td .field-box input { font-size: 12px; }
+.li-td .field-box .ai-chip { font-size: 11px; padding: 1px 6px; }
+
+/* ── PO Form ────────────────────────────────────────────────────── */
+.po-form { display: flex; flex-direction: column; gap: 0; }
+.po-group { margin-bottom: 24px; }
+.po-group-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; padding: 0 0 7px; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
+.po-row { display: grid; padding: 10px 0; border-bottom: 1px solid #f3f4f6; gap: 12px; }
+.po-row:last-child { border-bottom: none; }
+.po-row-2 { grid-template-columns: 1fr 1fr; }
+.po-row-1 { grid-template-columns: 1fr; }
+.po-label { font-size: 12px; color: #6b7280; font-weight: 500; margin-bottom: 5px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.po-label .req { color: #ef4444; font-weight: 700; }
+.po-label .opt { font-size: 10px; color: #9ca3af; font-weight: 400; }
+.po-input { width: 100%; padding: 6px 10px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 5px; font-family: inherit; color: #111827; background: #fff; box-sizing: border-box; }
+.po-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
+.po-total-display { font-size: 15px; font-weight: 700; font-family: monospace; padding: 5px 0; color: #111827; }
+@media (max-width: 700px) { .po-row-2 { grid-template-columns: 1fr; } }
+
+/* ── Line items table ───────────────────────────────────────────── */
+.li-table { width: 100%; border-collapse: collapse; }
+.li-table th { font-size: 11px; font-weight: 600; color: #6b7280; padding: 5px 6px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+.li-table th:nth-child(n+4) { text-align: right; }
+.li-td { padding: 4px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+.li-table tfoot td { font-size: 12px; padding: 7px 6px; border-top: 2px solid #e5e7eb; }
+.li-tfoot-label { text-align: right; color: #6b7280; font-weight: 600; }
+.li-tfoot-total { text-align: right; font-family: monospace; font-weight: 700; color: #111827; white-space: nowrap; }
+.li-total-cell { text-align: right; font-family: monospace; font-size: 12px; white-space: nowrap; color: #374151; }
+.li-remove { background: none; border: none; cursor: pointer; color: #d1d5db; font-size: 16px; padding: 0 2px; line-height: 1; display: block; }
+.li-remove:hover { color: #ef4444; background: none; }
 
 /* ── Match check row ────────────────────────────────────────────── */
 .check-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
@@ -179,6 +240,23 @@ details.sec .sec-content { padding: 18px; }
 /* ── Reasons & draft ────────────────────────────────────────────── */
 .reason-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .reason-item { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; padding: 6px 10px; border-radius: 6px; background: #f9fafb; border: 1px solid #f0f0f0; }
+.reason-item.warn  { background: #fef9c3; border-color: #fde68a; color: #92400e; }
+.reason-item.alert { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+
+/* ── Approval chain in PO form ──────────────────────────────────── */
+.appr-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #f3f4f6; }
+.appr-row:last-child { border-bottom: none; }
+.appr-row.approved { background: #f0fdf4; }
+.appr-row.rejected { background: #fef2f2; }
+.appr-btn { border-radius: 5px; padding: 4px 10px; font-size: 12px; cursor: pointer; border: 1px solid transparent; }
+.appr-btn:hover:not(:disabled) { filter: brightness(0.92); }
+.appr-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.appr-btn-ok  { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.appr-btn-rej { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.appr-status { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; }
+.appr-status.waiting  { background: #fef9c3; border: 1px solid #fde68a; color: #92400e; }
+.appr-status.ready    { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.appr-status.rejected { background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; }
 .reason-code { font-family: monospace; font-size: 11px; font-weight: 600; flex-shrink: 0; }
 .draft-reply { font-family: 'Menlo','Consolas',monospace; font-size: 11px; background: #f8f9fb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; color: #374151; }
 
@@ -249,6 +327,20 @@ a.back:hover { text-decoration: underline; }
     </div>
   </div>
 </div>
+
+<!-- Confirmation modal -->
+<div class="modal-overlay" id="confirm-modal" onclick="if(event.target===this)closeConfirmModal()">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head"><h2 id="confirm-title"></h2><button class="close" onclick="closeConfirmModal()">×</button></div>
+    <div class="modal-body">
+      <p id="confirm-message" style="font-size:14px;color:#374151;margin-bottom:20px;line-height:1.5"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="ghost" onclick="closeConfirmModal()">Cancel</button>
+        <button style="background:#6366f1;color:#fff;border:none;border-radius:5px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit" onclick="confirmModalYes()">Submit anyway</button>
+      </div>
+    </div>
+  </div>
+</div>
 <input type="file" id="file" accept=".eml" style="display:none">
 
 <script>
@@ -260,8 +352,19 @@ function esc(s) { if (s == null) return '—'; return String(s).replace(/&/g,'&a
 function chf(n) { return n == null ? '—' : Number(n).toLocaleString('de-CH', {minimumFractionDigits:2, maximumFractionDigits:2}); }
 function cur(n, c) { return n == null ? '—' : `${c ?? ''} ${chf(n)}`.trim(); }
 function statusBadge(s) {
-  const icons = { submitted:'✓', ready:'✓', needs_clarification:'↩', needs_human_review:'⚑', security:'⛔', failed:'✗', duplicate:'⊙', processing:'…' };
-  return `<span class="status-badge status-${esc(s)}">${icons[s] ?? '?'} ${esc(String(s).replace(/_/g,' '))}</span>`;
+  // Backward compat: existing DB rows may still have 'submitted' — display as Approved.
+  const display = s === 'submitted' ? 'approved' : s;
+  const LABEL = {
+    needs_clarification: 'Needs Review',
+    needs_human_review: 'Needs Review',
+    security: 'Security Risk',
+    failed: 'Failed', duplicate: 'Duplicate', processing: 'Processing',
+    waiting_approval: 'Waiting for Approval',
+    rejected: 'Rejected',
+    approved: 'Approved',
+  };
+  const ICON = { needs_clarification:'⚑', needs_human_review:'⚑', security:'⛔', failed:'✗', duplicate:'⊙', processing:'…', waiting_approval:'⏳', rejected:'✗', approved:'✓' };
+  return `<span class="status-badge status-${esc(display)}">${ICON[display] ?? '?'} ${esc(LABEL[display] ?? String(display).replace(/_/g,' '))}</span>`;
 }
 function confBar(c) {
   if (c == null) return '—';
@@ -313,8 +416,12 @@ window.addEventListener('hashchange', router);
 async function refreshState() {
   try {
     const s = await fetchJson('/api/state');
+    window._fxRates = s.fxRates || { CHF: 1.0, EUR: 0.96, USD: 0.88, GBP: 1.13 };
     $('#state').innerHTML = `<span>${esc(s.customer)}</span> · <span class="dot ${s.mockApi?'up':'down'}"></span> PO API ${s.mockApi?'online':'offline'}`;
-  } catch { $('#state').innerHTML = ''; }
+  } catch {
+    window._fxRates = window._fxRates || { CHF: 1.0, EUR: 0.96, USD: 0.88, GBP: 1.13 };
+    $('#state').innerHTML = '';
+  }
 }
 
 // ── Queue ───────────────────────────────────────────────────────────────────────
@@ -322,15 +429,17 @@ let justAddedId = null;   // highlights the row for a freshly processed email
 const qState = { status: '', search: '', sort: 'priority' };
 
 // Default sort order: most-urgent statuses first.
-const STATUS_PRIORITY = { security: 0, needs_human_review: 1, needs_clarification: 2, submitted: 3, duplicate: 4, failed: 5, processing: 6 };
-const STATUS_DOT = { security: '#ef4444', needs_human_review: '#f97316', needs_clarification: '#eab308', submitted: '#22c55e', duplicate: '#8b5cf6', failed: '#9ca3af', processing: '#38bdf8' };
-const PILL_ORDER = ['security', 'needs_human_review', 'needs_clarification', 'submitted', 'duplicate', 'failed'];
-const PILL_LABEL = { security: 'security', needs_human_review: 'human review', needs_clarification: 'clarification', submitted: 'submitted', duplicate: 'duplicate', failed: 'failed' };
+const STATUS_PRIORITY = { security: 0, needs_human_review: 1, needs_clarification: 1, waiting_approval: 2, rejected: 3, approved: 4, duplicate: 5, failed: 6, processing: 7 };
+const STATUS_DOT = { security: '#ef4444', needs_human_review: '#f97316', needs_clarification: '#f97316', submitted: '#22c55e', approved: '#22c55e', rejected: '#ef4444', waiting_approval: '#eab308', duplicate: '#8b5cf6', failed: '#9ca3af', processing: '#38bdf8' };
+const PILL_ORDER = ['security', 'needs_human_review', 'waiting_approval', 'rejected', 'approved', 'duplicate', 'failed'];
+const PILL_LABEL = { security: 'security risk', needs_human_review: 'needs review', needs_clarification: 'needs review', submitted: 'approved', duplicate: 'duplicate', failed: 'failed', approved: 'approved', rejected: 'rejected', waiting_approval: 'waiting for approval' };
 
 async function renderQueue() {
   const rows = await fetchJson('/api/queue');
   window._queue = rows;
   const counts = {}; rows.forEach(r => counts[r.status] = (counts[r.status] || 0) + 1);
+  // Merge needs_clarification into the single "needs review" pill so we don't show two identical pills.
+  counts['needs_human_review'] = (counts['needs_human_review'] || 0) + (counts['needs_clarification'] || 0);
   const pills = PILL_ORDER.filter(s => counts[s]).map(s =>
     `<div class="count-pill" data-status="${s}"><span class="cdot" style="background:${STATUS_DOT[s]}"></span>${PILL_LABEL[s]} <span class="n">${counts[s]}</span></div>`).join('');
 
@@ -376,7 +485,10 @@ function applyRows() {
   const rows = window._queue || [];
   const q = qState.search.trim().toLowerCase();
   let filtered = rows.filter(r =>
-    (!qState.status || r.status === qState.status) &&
+    (!qState.status ||
+      r.status === qState.status ||
+      // "needs review" pill covers both review statuses
+      (qState.status === 'needs_human_review' && r.status === 'needs_clarification')) &&
     (!q || (r.requester || '').toLowerCase().includes(q) || (r.supplier || '').toLowerCase().includes(q)));
 
   const recv = r => new Date(r.receivedAt || r.createdAt || 0).getTime();
@@ -400,11 +512,15 @@ function queueTotal(r) {
   return `<div>CHF ${chf(r.totalChf)}</div>${sub}`;
 }
 function queueChain(r) {
+  // Hide approval chain for statuses before the clerk submits for approval
+  if (['needs_human_review','needs_clarification','security'].includes(r.status)) return '<span style="color:#9ca3af">—</span>';
   const steps = r.chain;
   if (!steps || !steps.length) return '<span style="color:#9ca3af">—</span>';
-  return `<div class="chain-list">${steps.map((s,i) =>
-    `${i>0?'<span class="chain-arrow">→</span>':''}<span class="appr ${s.requiresAlternate?'appr-alt':'appr-pending'}" title="${esc((s.role||'').replace(/_/g,' '))}${s.requiresAlternate?' — requester = approver, alternate required':' — pending'}">${esc(s.name)}${s.requiresAlternate?' ⚠':''}</span>`
-  ).join('')}</div>`;
+  return `<div class="chain-list">${steps.map((s,i) => {
+    const cls = s.status === 'approved' ? 'appr-approved' : s.status === 'rejected' ? 'appr-rejected' : (s.requiresAlternate ? 'appr-alt' : 'appr-pending');
+    const tip = `${(s.role||'').replace(/_/g,' ')} — ${s.status || 'pending'}${s.requiresAlternate ? ' (alternate required)' : ''}`;
+    return `${i>0?'<span class="chain-arrow">→</span>':''}<span class="appr ${cls}" title="${esc(tip)}">${esc(s.name)}${s.requiresAlternate?' ⚠':''}</span>`;
+  }).join('')}</div>`;
 }
 function queueRowHtml(r) {
   const conf = (r.extractionFailed || r.minConfidence == null) ? '<span style="color:#9ca3af">n/a</span>' : confBar(r.minConfidence);
@@ -442,28 +558,26 @@ function sec(title, oneline, content) {
 
 async function renderDetail(id) {
   const d = await fetchJson('/api/requisition/' + id);
-  window._detail = d;              // stashed so the action buttons can read chain/draft
-  const ext = d.extraction, sol = d.resolution;
-  view.innerHTML = `
-    <a class="back" href="#/queue">← Back to queue</a>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <div class="page-title" style="margin:0">Requisition #${d.id}</div>${statusBadge(d.status)}
-    </div>
-    ${summaryCard(d)}
-    <div class="detail-grid">
-      <div class="detail-left">${emailCard(d)}${draftCard(d)}</div>
-      <div>${poFormCard(d, ext, sol)}${llmCard(d.llmCalls)}</div>
-    </div>`;
+  window._detail = d;
+  _detailStatus = null;    // always start from DB status
+  _approvalStates = (d.approvalState?.states)   ?? {};
+  _alternateApprovers = (d.approvalState?.alternates) ?? {};
+  _showAlternateForm = new Set();
+  _poSubmitted = false;
+  _clerkFormValues = null;
+  _submitError = null;
+  renderDetailView(d);
 }
 
 // ── Summary card ────────────────────────────────────────────────────────────────
 function statusHeadline(s) {
   return ({
-    submitted:           'Ready — purchase order raised',
+    approved:            'Approved — purchase order raised',
+    submitted:           'Approved — purchase order raised',  // backward compat
     duplicate:           'Duplicate — existing PO reused',
-    needs_clarification: 'Waiting on the requester',
-    needs_human_review:  'Needs human review',
-    security:            'Blocked for security review',
+    needs_clarification: 'Needs review',
+    needs_human_review:  'Needs review',
+    security:            'Security risk — blocked for review',
     failed:              'Processing failed',
     processing:          'Processing',
   })[s] ?? s;
@@ -472,7 +586,8 @@ function statusHeadline(s) {
 function plainReason(d) {
   const details = (d.reviewItems || []).map(r => r.detail).filter(Boolean);
   switch (d.status) {
-    case 'submitted':  return { reason: 'All required fields were extracted confidently and resolved against master data, so a purchase order was raised automatically.', action: 'Route the PO to the approvers listed.' };
+    case 'approved':
+    case 'submitted':   return { reason: 'All approvers have approved the requisition and a purchase order has been raised.', action: 'No further action needed — see the PO number below.' };
     case 'duplicate':  return { reason: 'This email was processed before; the existing purchase order was reused rather than creating a second one.', action: 'No action needed — see the existing PO.' };
     case 'needs_clarification': return { reason: 'Required information is missing or unclear, so the requisition was held rather than guessed.' + (details.length ? ' Missing: ' + esc(details.join('; ')) + '.' : ''), action: 'Send the drafted reply to the requester.' };
     case 'needs_human_review':  return { reason: 'A rule needs a person to decide.' + (details.length ? ' Flags: ' + esc(details.join('; ')) + '.' : ''), action: 'Review the flags, then approve or reject.' };
@@ -707,111 +822,917 @@ function poCard(d) {
   `);
 }
 
-// Comprehensive PO form — consolidated extraction + resolution + editable PO fields
-function poFormCard(d, ext, sol) {
-  if (!ext || !sol) return card('PO', '<div style="color:#9ca3af">Incomplete data.</div>');
+// ── PO Form helpers ───────────────────────────────────────────────────────────
+// Each field is a .field-box that looks like a regular input. When an AI value
+// exists, a coloured chip sits inside the box. Clicking × removes the chip and
+// the <input> inside the same box becomes editable. The input always holds the
+// current value so reads work the same regardless of chip state.
 
-  const fc = ext.field_confidence || {};
-  const conf = (val) => val != null ? confBar(val) : '';
-  const source = (val, conf) => val != null && val !== '' ? `<span class="source ${conf === undefined || conf === null ? 'auto' : conf > 0.7 ? 'auto' : 'manual'}">extracted</span>` : '';
-  const empty = (val) => val == null || val === '' ? '<span class="empty-val">empty</span>' : esc(val);
+// Confidence threshold below which an AI chip turns yellow (warning).
+// Mirrors the pipeline's autoConfidence threshold (0.80): if the pipeline
+// would have auto-submitted the value, show a plain chip; if it wouldn't
+// (confidence below 80%), the clerk should verify it — warn chip.
+const CHIP_WARN_THRESHOLD = 80; // percent
 
-  const supplier = sol.supplier?.match;
-  const costCentre = sol.costCentre?.match;
-  const glAccount = sol.glAccount?.match;
-  const delivery = sol.delivery;
-  const items = ext.line_items || [];
-  const rawTotal = rawTotalOf(ext);
-  const chfTotal = sol.computedTotalChf;
+function aiChip(fieldId, displayVal, rawVal, confidence, inputType = 'text', inputAttrs = '', placeholder = '', alertLevel = null) {
+  const hasVal   = displayVal != null && displayVal !== '';
+  const confPct  = confidence != null ? Math.round(confidence * 100) : null;
+  // Color: security → red, explicit warning OR low confidence → yellow, otherwise neutral plain
+  const chipClass = alertLevel === 'security' ? 'ai-chip-alert'
+    : (alertLevel === 'warning' || (confPct != null && confPct < CHIP_WARN_THRESHOLD)) ? 'ai-chip-warn'
+    : 'ai-chip-plain';
+  // Tooltip text — shown via native title attribute; does NOT change chip content on hover
+  const tipText  = confPct != null
+    ? `extracted by AI with ${confPct}% confidence`
+    : 'extracted by AI';
+  // ⚠ visible at chip end on warn chips — prompts the user to hover and read tooltip
+  const warnIcon = chipClass === 'ai-chip-warn'
+    ? '<span class="ai-warn-icon">⚠</span>' : '';
+  const sparkle  = '<span class="ai-spark" aria-hidden="true"><span class="sp-big">✦</span><span class="sp-sm">✦</span></span>';
+  const safeRaw  = esc(String(rawVal ?? displayVal ?? ''));
+  const ph       = placeholder ? ` placeholder="${esc(placeholder)}"` : '';
+  const chipHtml = hasVal ? `<span class="ai-chip ${chipClass}" title="${tipText}">${sparkle}<span class="chip-text">${esc(String(displayVal))}</span>${warnIcon}<button class="ai-chip-remove" onclick="event.stopPropagation();removeAiChip('${fieldId}')" title="Remove and edit">×</button></span>` : '';
+  return `<div class="field-box" id="fieldbox-${fieldId}" onclick="this.querySelector('input').focus()">${chipHtml}<input id="input-${fieldId}" type="${inputType}" value="${safeRaw}"${hasVal ? ' style="display:none"' : ''}${ph} ${inputAttrs}></div>`;
+}
 
-  const poNum = d.po?.po_number;
-  const poTotal = d.po?.total_chf;
+function aiDateChip(fieldId, dateVal, basisLabel, alertLevel = null, confidence = null) {
+  const hasVal   = !!dateVal;
+  const confPct  = confidence != null ? Math.round(confidence * 100) : null;
+  const chipClass = alertLevel === 'security' ? 'ai-chip-alert'
+    : (alertLevel === 'warning' || (confPct != null && confPct < CHIP_WARN_THRESHOLD)) ? 'ai-chip-warn'
+    : 'ai-chip-plain';
+  const tipText  = confPct != null ? `extracted by AI with ${confPct}% confidence` : 'extracted by AI';
+  const warnIcon = chipClass === 'ai-chip-warn' ? '<span class="ai-warn-icon">⚠</span>' : '';
+  const sparkle  = '<span class="ai-spark" aria-hidden="true"><span class="sp-big">✦</span><span class="sp-sm">✦</span></span>';
+  const chipHtml = hasVal ? `<span class="ai-chip ${chipClass}" title="${tipText}">${sparkle}<span class="chip-text">${esc(dateVal)}</span>${warnIcon}<button class="ai-chip-remove" onclick="event.stopPropagation();removeAiChip('${fieldId}')" title="Remove and edit">×</button></span>` : '';
+  return `<div class="field-box" id="fieldbox-${fieldId}" onclick="this.querySelector('input').focus()">${chipHtml}<input id="input-${fieldId}" type="date" value="${hasVal ? esc(dateVal) : ''}"${hasVal ? ' style="display:none"' : ''} oninput="checkSubmitButton()"></div>`;
+}
 
-  return card('Purchase Order Details', `
+function removeAiChip(fieldId) {
+  const box = document.getElementById('fieldbox-' + fieldId);
+  if (box) box.querySelector('.ai-chip')?.remove();
+  const inp = document.getElementById('input-' + fieldId);
+  if (inp) { inp.style.display = ''; inp.focus(); try { inp.select(); } catch(_) {} }
+  updateGrandTotal();
+  checkSubmitButton();
+}
+
+// Disable "Submit for approval" if any mandatory field is missing.
+// Mandatory: supplier_id, delivery_date, at least one line item with qty > 0 and price > 0.
+function checkSubmitButton() {
+  const wrap = document.getElementById('submit-btn-wrap');
+  const btn  = wrap?.querySelector('button.btn-submit-appr');
+  if (!btn) return;
+
+  const missing = [];
+  const suppVal = document.getElementById('input-supplier_id')?.value?.trim();
+  if (!suppVal) missing.push('supplier');
+
+  const dateVal = document.getElementById('input-delivery_date')?.value?.trim();
+  if (!dateVal) missing.push('delivery date');
+
+  // At least one line item must have both qty > 0 and price > 0.
+  const priceInputs = document.querySelectorAll('[id^="input-li-price-"]');
+  let hasLine = false;
+  priceInputs.forEach(priceInput => {
+    const idx = priceInput.id.replace('input-li-price-', '');
+    const qty = parseFloat(document.getElementById(`input-li-qty-${idx}`)?.value);
+    const price = parseFloat(priceInput.value);
+    if (!isNaN(qty) && qty > 0 && !isNaN(price) && price > 0) hasLine = true;
+  });
+  if (!hasLine) missing.push('at least one priced line item');
+
+  if (missing.length) {
+    btn.disabled = true;
+    if (wrap) wrap.dataset.tip = `Required: ${missing.join(', ')}`;
+  } else {
+    btn.disabled = false;
+    if (wrap) delete wrap.dataset.tip;
+  }
+}
+
+function lineItemRow(item, idx, currency, fromAi = true, alertLevel = null, lineConf = null) {
+  const p100 = item.price_basis === 'per_100';
+  const effectivePrice = p100 && item.unit_price != null ? item.unit_price / 100 : (item.unit_price ?? null);
+  const hasQty   = item.quantity != null;
+  const hasPrice = effectivePrice != null;
+  const lt = hasQty && hasPrice ? item.quantity * effectivePrice : null;
+
+  const descChip  = aiChip(`li-desc-${idx}`,  fromAi && item.description  ? item.description  : null, item.description  ?? '', lineConf, 'text',   '', 'Item description', alertLevel);
+  const qtyChip   = aiChip(`li-qty-${idx}`,   fromAi && hasQty             ? item.quantity     : null, item.quantity     ?? '', lineConf, 'number', 'oninput="updateGrandTotal()" step="0.001" min="0" style="text-align:right"', '0', alertLevel);
+  const unitChip  = aiChip(`li-unit-${idx}`,  fromAi && item.unit          ? item.unit         : null, item.unit         ?? '', lineConf, 'text',   '', 'pcs', alertLevel);
+  const priceChip = aiChip(`li-price-${idx}`, fromAi && hasPrice           ? effectivePrice    : null, effectivePrice    ?? '', lineConf, 'number', 'oninput="updateGrandTotal()" step="0.0001" min="0" style="text-align:right"', '0.00', alertLevel);
+
+  return `<tr class="li-tr" data-row="${idx}">
+    <td class="li-td" style="min-width:140px">${descChip}</td>
+    <td class="li-td" style="width:80px">${qtyChip}</td>
+    <td class="li-td" style="width:60px">${unitChip}</td>
+    <td class="li-td" style="width:110px">${priceChip}${p100 ? `<div style="font-size:9px;color:#9ca3af;margin-top:1px">÷100 applied</div>` : ''}</td>
+    <td class="li-td li-total-cell" id="li-total-${idx}">${lt != null ? chf(lt) : '—'}</td>
+    <td class="li-td" style="width:24px"><button class="li-remove" onclick="this.closest('tr').remove();updateGrandTotal()" title="Remove row">×</button></td>
+  </tr>`;
+}
+
+function addLineItem() {
+  const tbody = document.getElementById('li-tbody');
+  if (!tbody) return;
+  tbody.insertAdjacentHTML('beforeend', lineItemRow({}, 'new' + Date.now(), '', false));
+}
+
+function updateGrandTotal() {
+  const tbody = document.getElementById('li-tbody');
+  if (!tbody) return;
+  const currency = document.getElementById('input-currency')?.value || 'CHF';
+  let grand = 0;
+  tbody.querySelectorAll('tr.li-tr').forEach(row => {
+    const ridx      = row.dataset.row;
+    const qty       = parseFloat(document.getElementById(`input-li-qty-${ridx}`)?.value) || 0;
+    const price     = parseFloat(document.getElementById(`input-li-price-${ridx}`)?.value) || 0;
+    const lt        = qty * price;
+    const totalCell = document.getElementById(`li-total-${ridx}`);
+    if (totalCell) totalCell.textContent = (qty > 0 && price > 0) ? chf(lt) : '—';
+    if (qty > 0 && price > 0) grand += lt;
+  });
+  const fmt = `${currency} ${chf(grand)}`;
+  const grandEl = document.getElementById('li-grand-total');
+  if (grandEl) grandEl.textContent = fmt;
+  const finEl = document.getElementById('po-financial-total');
+  if (finEl) finEl.textContent = fmt;
+  checkSubmitButton();
+}
+
+function updateCurrency(newCurrency) {
+  // Use FX rates from master data (fetched on boot); fall back to hardcoded values.
+  const fxRates = window._fxRates || { CHF: 1.0, EUR: 0.96, USD: 0.88, GBP: 1.13 };
+  const sel     = document.getElementById('input-currency');
+  const prevCurrency = sel?.dataset.prev || newCurrency;
+
+  if (prevCurrency !== newCurrency) {
+    // Convert each line item unit price: prevCurrency → CHF → newCurrency
+    const prevRate = fxRates[prevCurrency] || 1.0;
+    const newRate  = fxRates[newCurrency]  || 1.0;
+    const factor   = prevRate / newRate;
+    const tbody    = document.getElementById('li-tbody');
+    if (tbody) {
+      tbody.querySelectorAll('tr.li-tr').forEach(row => {
+        const ridx       = row.dataset.row;
+        const priceInput = document.getElementById(`input-li-price-${ridx}`);
+        if (!priceInput) return;
+        const cur = parseFloat(priceInput.value);
+        if (!isNaN(cur) && cur !== 0) {
+          const converted = Math.round(cur * factor * 10000) / 10000;
+          priceInput.value = String(converted);
+          // Sync chip display text (shows the live converted value)
+          const chipText = priceInput.closest('.field-box')?.querySelector('.chip-text');
+          if (chipText) chipText.textContent = String(converted);
+        }
+      });
+    }
+  }
+
+  // Record new currency so the next change converts from it
+  if (sel) sel.dataset.prev = newCurrency;
+
+  // Sync labels
+  const priceHeader = document.getElementById('li-price-header');
+  if (priceHeader) priceHeader.textContent = `Unit price (${newCurrency})`;
+  const totalLabel = document.getElementById('po-total-label');
+  if (totalLabel) totalLabel.innerHTML = `Total (${newCurrency}) <span class="req">*</span>`;
+
+  // Recalculate totals and sync header
+  updateGrandTotal();
+  const grandTotal   = document.getElementById('li-grand-total');
+  const headerTotal  = document.getElementById('detail-header-total-val');
+  if (grandTotal && headerTotal) headerTotal.textContent = grandTotal.textContent;
+}
+
+
+
+// ── Frontend state override and new detail-view functions ─────────────────────
+// _detailStatus overrides d.status for rendering; set when the clerk takes action.
+let _detailStatus = null;
+// Per-approver status in the current view session (idx → 'pending'|'approved'|'rejected')
+let _approvalStates = {};
+// Alternate approvers assigned by the clerk (idx → {name, email})
+let _alternateApprovers = {};
+// Which "add alternate" inline forms are currently expanded
+let _showAlternateForm = new Set();
+// Prevents double-submission when mock approval completes
+let _poSubmitted = false;
+// Clerk-edited form values captured at "Submit for approval" time, sent to backend on PO creation.
+let _clerkFormValues = null;
+// Fixable error from the PO submission step (e.g. missing qty/price). Shown as a
+// banner in the waiting_approval view with a "Fix data" button that reopens the form.
+let _submitError = null;
+
+function renderDetailView(d) {
+  // Existing DB rows may still have 'submitted' — treat as approved in the UI.
+  const rawStatus = _detailStatus || d.status;
+  const status = rawStatus === 'submitted' ? 'approved' : rawStatus;
+  const ext = d.extraction, sol = d.resolution;
+  const simpleHeader = ['needs_human_review','needs_clarification','security','waiting_approval','approved','rejected'].includes(status);
+  // Show chain + readonly PO for all post-submission states
+  const showChain    = ['waiting_approval', 'approved', 'rejected'].includes(status);
+  const showReadonly = showChain;
+  // Section order: header → chain (post-submission) → PO form → original email → LLM calls
+  view.innerHTML = `
+    <a class="back" href="#/queue">← Back to queue</a>
+    ${simpleHeader
+      ? detailHeader(status, d, ext, sol)
+      : `<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+           <div class="page-title" style="margin:0">Requisition #${d.id}</div>${statusBadge(status)}
+         </div>
+         ${summaryCard(d)}`}
+    ${showChain ? (_submitError ? submitErrorBanner(_submitError) : '') + approvalChainSection(d, sol) : ''}
+    ${showReadonly ? poFormReadonly(d, ext, sol) : poFormCard(d, ext, sol)}
+    ${emailCard(d)}
+    ${draftCard(d)}
+    ${llmCard(d.llmCalls)}`;
+  // Run after DOM is set so checkSubmitButton can find the inputs.
+  if (!showReadonly) checkSubmitButton();
+}
+
+function detailHeader(status, d, ext, sol) {
+  const currency       = ext?.currency || 'CHF';
+  const rawTotal       = rawTotalOf(ext);
+  const isNeedsReview  = status === 'needs_human_review' || status === 'needs_clarification';
+  const isWaiting      = status === 'waiting_approval';
+  const isApproved     = status === 'approved';
+  const isRejected     = status === 'rejected';
+  // Show needs_clarification with the same badge as needs_human_review
+  const displayStatus  = status === 'needs_clarification' ? 'needs_human_review' : status;
+
+  const totalBlock = `
+    <div class="detail-header-total">
+      <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Purchase Order Total</div>
+      <div id="detail-header-total-val" style="font-size:20px;font-weight:700;font-family:monospace;color:#111827">${esc(currency)} ${chf(rawTotal)}</div>
+    </div>`;
+
+  let rightHtml;
+  if (isWaiting) {
+    rightHtml = `${totalBlock}
+      <div style="font-size:13px;color:#6b7280">Awaiting approver responses</div>`;
+  } else if (isApproved) {
+    rightHtml = `${totalBlock}
+      <div style="font-size:13px;color:#166534;font-weight:600">✓ All approvers approved</div>`;
+  } else if (isRejected) {
+    rightHtml = `${totalBlock}
+      <div style="font-size:13px;color:#991b1b;font-weight:600">✗ Rejected by an approver</div>`;
+  } else {
+    const clarifyBtn = isNeedsReview
+      ? `<button class="ghost" onclick="requestClarification()">Request clarification</button>`
+      : '';
+    rightHtml = `${totalBlock}
+      <div class="detail-header-actions">
+        ${clarifyBtn}
+        <span id="submit-btn-wrap">
+          <button class="btn-submit-appr" onclick="submitForApproval()">Submit for approval</button>
+        </span>
+      </div>`;
+  }
+
+  return `<div class="detail-header">
+    <div class="detail-header-meta">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+        <div class="page-title" style="margin:0;font-size:16px">Requisition #${d.id}</div>
+        ${statusBadge(displayStatus)}
+      </div>
+      ${d.email?.subject ? `<div style="font-size:12px;color:#6b7280">${esc(d.email.subject)}</div>` : ''}
+      ${(() => {
+        const items = (d.reviewItems || []).slice().sort((a, b) => {
+          const sev = { security: 0, human: 1, clarification: 2 };
+          return (sev[a.queue] ?? 9) - (sev[b.queue] ?? 9);
+        });
+        return items.length
+          ? `<div style="margin-top:5px;display:flex;flex-direction:column;gap:2px">${items.map(it => `<div style="font-size:12px;color:#92400e">⚑ ${esc(it.detail)}</div>`).join('')}</div>`
+          : '';
+      })()}
+    </div>
+    <div class="detail-header-right">${rightHtml}</div>
+  </div>`;
+}
+
+function reRenderDetail(status) {
+  _detailStatus = status;
+  const d = window._detail;
+  if (d) renderDetailView(d);
+}
+
+// Opens a mailto pre-filled with the draft reply to the original sender.
+function requestClarification() {
+  const d = window._detail;
+  if (!d) return;
+  // from can be a string "Name <email>" or an object {name, address}
+  const from = d.email?.from;
+  const to   = typeof from === 'string' ? from : (from?.address || '');
+  const subj = encodeURIComponent('Re: ' + (d.email?.subject || 'Purchase Requisition'));
+  const body = encodeURIComponent(
+    d.draftReply || 'Please provide the missing information for your purchase requisition.'
+  );
+  window.location.href = `mailto:${to}?subject=${subj}&body=${body}`;
+}
+
+function submitForApproval() {
+  const d = window._detail;
+  if (!d) return;
+  const status = _detailStatus || d.status;
+  const isNeedsReview = status === 'needs_human_review' || status === 'needs_clarification';
+  const proceed = async () => {
+    // Capture the clerk's current form values NOW, before the form becomes read-only.
+    _clerkFormValues = collectFormValues();
+    // Persist to DB: status → waiting_approval, re-resolve with clerk overrides.
+    // This means delivery date, cost centre, etc. survive navigation and the
+    // waiting_approval form shows the correct resolved data.
+    try {
+      await fetch(`/api/requisition/${d.id}/waiting`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(_clerkFormValues),
+      });
+      // Re-fetch so window._detail has the freshly resolved data (delivery date,
+      // recomputed chain, updated total) before we render the read-only form.
+      const fresh = await fetchJson('/api/requisition/' + d.id);
+      window._detail = fresh;
+    } catch (err) {
+      console.warn('Could not persist waiting_approval status:', err);
+    }
+    reRenderDetail('waiting_approval');
+  };
+  const isSecurityRisk = status === 'security';
+  if (isSecurityRisk) {
+    openConfirmModal(
+      'Security flag — override required',
+      'This requisition has a security flag. By submitting you confirm you have reviewed the flag and take responsibility for proceeding. Continue?',
+      proceed
+    );
+    return;
+  }
+  if (isNeedsReview) {
+    const hasWarnChips = document.querySelectorAll('.ai-chip-warn').length > 0;
+    if (hasWarnChips) {
+      openConfirmModal(
+        'Flagged fields detected',
+        'One or more fields are flagged for review or have low confidence. Are you sure you want to submit for approval?',
+        proceed
+      );
+      return;
+    }
+  }
+  proceed();
+}
+
+let _confirmCallback = null;
+function openConfirmModal(title, message, onConfirm) {
+  _confirmCallback = onConfirm;
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-message').textContent = message;
+  document.getElementById('confirm-modal').classList.add('open');
+}
+function closeConfirmModal() {
+  document.getElementById('confirm-modal').classList.remove('open');
+  _confirmCallback = null;
+}
+function confirmModalYes() {
+  const cb = _confirmCallback;
+  closeConfirmModal();
+  if (cb) cb();
+}
+
+function poFormReadonly(d, ext, sol) {
+  if (!ext && !sol) return card('Purchase Order', '<div style="color:#9ca3af;font-size:13px">No data extracted.</div>');
+  const currency    = ext?.currency || 'CHF';
+  const rawTotal    = rawTotalOf(ext);
+  const supplier    = sol?.supplier?.match;
+  const costCtr     = sol?.costCentre?.match;
+  const gl          = sol?.glAccount?.match;
+  const delivery    = sol?.delivery;
+  const items       = ext?.line_items || [];
+  const poNum       = d.po?.po_number;
+  const reqRef      = d.po?.requisition_reference ?? (d.id ? `REQ-${d.id}` : '');
+  const delivDate   = delivery?.date ? delivery.date.split('T')[0] : null;
+  const ro = (label, val) => `
+    <div>
+      <div class="po-label">${esc(label)}</div>
+      <div style="font-size:13px;color:#111827;padding:5px 0;min-height:24px">${val != null && val !== '' ? val : '<span style="color:#9ca3af">—</span>'}</div>
+    </div>`;
+  const itemRows = items.map(item => {
+    const p100 = item.price_basis === 'per_100';
+    const ep = p100 && item.unit_price != null ? item.unit_price / 100 : item.unit_price;
+    const lt = item.quantity != null && ep != null ? item.quantity * ep : null;
+    return `<tr class="li-tr">
+      <td class="li-td">${esc(item.description || '')}</td>
+      <td class="li-td" style="text-align:right">${item.quantity ?? '—'}</td>
+      <td class="li-td">${esc(item.unit || '')}</td>
+      <td class="li-td" style="text-align:right">${ep != null ? chf(ep) : '—'}</td>
+      <td class="li-td li-total-cell">${lt != null ? chf(lt) : '—'}</td>
+    </tr>`;
+  }).join('');
+  return card('Purchase Order', `
+    <div style="font-size:12px;color:#92400e;margin-bottom:12px;padding:6px 10px;background:#fef9c3;border:1px solid #fde68a;border-radius:5px">
+      ⏳ Waiting for approval — form is read-only
+    </div>
     <div class="po-form">
-      <!-- Supplier & Currency -->
-      <div class="po-section">
-        <div class="po-section-title">Supplier & Currency</div>
-        <div class="po-field">
-          <label>Supplier <span class="mandatory">*</span> <span class="source auto">from AI</span></label>
-          <div>${supplier ? `<strong>${esc(supplier.name)}</strong><br><span style="font-size:11px;color:#6b7280">${esc(supplier.id)}</span>` : '<span class="empty-val">not resolved</span>'}</div>
-          <div class="conf-badge">${conf(fc.supplier_name)}</div>
-        </div>
-        <div class="po-field">
-          <label>Currency <span class="mandatory">*</span></label>
-          <select>${['CHF','EUR','USD','GBP'].map(c => `<option ${c === (ext.currency || 'CHF') ? 'selected' : ''}>${c}</option>`).join('')}</select>
+      <div class="po-group">
+        <div class="po-group-title">Vendor</div>
+        <div class="po-row po-row-2">
+          ${ro('Supplier ID', supplier ? esc(supplier.name) + ' <span style="color:#9ca3af;font-size:11px">(' + esc(supplier.id) + ')</span>' : null)}
+          ${ro('Currency', esc(currency))}
         </div>
       </div>
-
-      <!-- Delivery -->
-      <div class="po-section">
-        <div class="po-section-title">Delivery</div>
-        <div class="po-field">
-          <label>Requested Date <span class="mandatory">*</span></label>
-          <input type="date" value="${delivery?.date ? delivery.date.split('T')[0] : ''}" />
-          <div class="conf-badge" style="font-size:10px;color:#6b7280">${delivery ? delivery.basis ? `${delivery.basis}` : 'resolved' : 'n/a'}</div>
+      <div class="po-group">
+        <div class="po-group-title">Delivery</div>
+        <div class="po-row po-row-1">
+          ${ro('Requested delivery date', delivDate ? esc(delivDate) : null)}
         </div>
       </div>
-
-      <!-- Cost Centre & GL -->
-      <div class="po-section">
-        <div class="po-section-title">Finance</div>
-        <div class="po-field">
-          <label>Cost Centre <span class="mandatory">*</span></label>
-          <div>${costCentre ? `<strong>${esc(costCentre.code)}</strong> ${esc(costCentre.name)}` : '<span class="empty-val">not resolved</span>'}</div>
-        </div>
-        <div class="po-field">
-          <label>GL Account <span style="font-size:10px;color:#6b7280">(advisory)</span></label>
-          <div>${glAccount ? `<strong>${esc(glAccount.code)}</strong> ${esc(glAccount.name)}` : '<span class="empty-val">auto-determined by ERP</span>'}</div>
+      <div class="po-group">
+        <div class="po-group-title">Line items</div>
+        <div style="padding:8px 0">
+          <table class="li-table">
+            <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th style="text-align:right">Unit price (${esc(currency)})</th><th style="text-align:right">Line total</th></tr></thead>
+            <tbody>${itemRows}</tbody>
+            <tfoot><tr><td colspan="4" class="li-tfoot-label">Total</td><td class="li-tfoot-total">${esc(currency)} ${chf(rawTotal)}</td></tr></tfoot>
+          </table>
         </div>
       </div>
-
-      <!-- Totals -->
-      <div class="po-section">
-        <div class="po-section-title">Totals</div>
-        <div class="po-field">
-          <label style="display:block;margin-bottom:6px">Original Total</label>
-          <div class="mono" style="font-size:13px;font-weight:600">${(ext.currency || 'CHF')} ${num(rawTotal)}</div>
+      <div class="po-group">
+        <div class="po-group-title">Financial</div>
+        <div class="po-row po-row-2">
+          ${ro('Total (' + esc(currency) + ')', '<span style="font-size:15px;font-weight:700;font-family:monospace">' + esc(currency) + ' ' + chf(rawTotal) + '</span>')}
+          ${ro('Cost centre', costCtr ? esc(costCtr.code) + ' — ' + esc(costCtr.name) : null, false)}
         </div>
-        <div class="po-field">
-          <label style="display:block;margin-bottom:6px">CHF Total (approval)</label>
-          <div class="mono" style="font-size:13px;font-weight:600">CHF ${chf(chfTotal)}</div>
+        <div class="po-row po-row-2">
+          ${ro('GL account', gl ? esc(gl.code) + ' — ' + esc(gl.name) : null, false)}
+          ${ro('Tax amount', null, false)}
         </div>
-        ${poNum ? `<div class="po-field" style="margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px">
-          <label style="display:block;margin-bottom:6px">✓ Submitted</label>
-          <div class="mono" style="font-size:13px;color:#166534;font-weight:600">${esc(poNum)}</div>
-          <div class="mono" style="font-size:12px;color:#6b7280">CHF ${chf(poTotal)}</div>
-        </div>` : ''}
+      </div>
+      <div class="po-group">
+        <div class="po-group-title">Reference</div>
+        <div class="po-row po-row-1">
+          ${ro('Requisition reference', reqRef ? esc(reqRef) : null, false)}
+        </div>
       </div>
     </div>
+    ${poNum ? `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;margin-top:10px">
+      <span style="font-size:20px;line-height:1">✓</span>
+      <div><div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Submitted</div>
+      <div style="font-size:17px;font-weight:700;font-family:monospace;color:#166534">${esc(poNum)}</div></div>
+    </div>` : ''}
+  `);
+}
 
-    <div style="margin-top:16px;padding:14px;background:#f0fdf4;border:1px solid #dcfce7;border-radius:6px">
-      <div style="font-weight:600;font-size:12px;color:#166534;margin-bottom:8px">Line Items (${items.length})</div>
-      <div class="po-items-list">
-        ${items.map((item, i) => `
-          <div class="po-item">
-            <div class="po-item-header">${esc(item.description || 'Unnamed item')} <span class="conf-badge">${confBar(fc.line_items?.[i]?.quantity ?? 0.8)}</span></div>
-            <div class="po-item-row">
-              <div><label style="font-size:11px;color:#6b7280">QTY ${item.quantity != null ? `✓` : '?'}</label></div>
-              <div><label style="font-size:11px;color:#6b7280">@</label></div>
-              <div><label style="font-size:11px;color:#6b7280">Price</label></div>
-              <div><label style="font-size:11px;color:#6b7280">Total</label></div>
-            </div>
-            <div class="po-item-row">
-              <div>${item.quantity != null ? item.quantity : '—'} ${item.unit || '?'}</div>
-              <div>${(ext.currency || 'CHF')}</div>
-              <div>${item.unit_price != null ? num(item.unit_price) : '—'}</div>
-              <div style="font-weight:600">${item.quantity != null && item.unit_price != null ? num(item.quantity * item.unit_price) : '—'}</div>
-            </div>
-            ${item.item_code ? `<div style="margin-top:6px;font-size:11px;color:#6b7280">Code: <span class="mono">${esc(item.item_code)}</span></div>` : ''}
+function submitErrorBanner(msg) {
+  return `<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:12px">
+    <span style="font-size:18px;line-height:1.3">⚠</span>
+    <div style="flex:1">
+      <div style="font-weight:600;color:#991b1b;margin-bottom:4px">Submission failed — fix required</div>
+      <div style="font-size:13px;color:#7f1d1d">${esc(msg)}</div>
+    </div>
+    <button class="ghost" style="white-space:nowrap;color:#991b1b;border-color:#fca5a5" onclick="backToEdit()">Fix data</button>
+  </div>`;
+}
+
+async function backToEdit() {
+  const d = window._detail;
+  if (!d) return;
+  // Revert DB status so the form becomes editable again, then re-fetch and render.
+  await fetch(`/api/requisition/${d.id}/reopen`, { method: 'POST' })
+    .catch(err => console.warn('reopen failed:', err));
+  _submitError = null;
+  _poSubmitted = false;
+  _approvalStates = {};
+  const fresh = await fetchJson('/api/requisition/' + d.id);
+  window._detail = fresh;
+  _detailStatus = null;
+  renderDetailView(fresh);
+}
+
+function approvalChainSection(d, sol) {
+  const cr    = sol?.chain;
+  const chain = cr?.chain || [];
+  if (!chain.length) {
+    return card('Chain of approval', '<div style="color:#9ca3af;font-size:13px">No approvers required for this total.</div>');
+  }
+  const overallStatus = _detailStatus || d.status;
+
+  // Compute step-level approved / rejected using the same logic as cycleApproverStatus
+  const stepApproved = i => {
+    const s = chain[i];
+    if (s?.requiresAlternate) return !!_alternateApprovers[i] && _approvalStates[`alt-${i}`] === 'approved';
+    return _approvalStates[i] === 'approved';
+  };
+  const stepRejected = i => {
+    const s = chain[i];
+    if (s?.requiresAlternate) return !!_alternateApprovers[i] && _approvalStates[`alt-${i}`] === 'rejected';
+    return _approvalStates[i] === 'rejected';
+  };
+  const anyRejected = chain.some((_, i) => stepRejected(i));
+  const allApproved = chain.length > 0 && chain.every((_, i) => stepApproved(i));
+
+  // ── Banner ────────────────────────────────────────────────────────────────
+  // Conflicts (requiresAlternate) are announced here, not per-row.
+  const conflicts = chain.map((s, i) => ({ s, i })).filter(({ s }) => s.requiresAlternate);
+  const unresolvedConflicts = conflicts.filter(({ i }) => !_alternateApprovers[i]);
+  let banner;
+  if (anyRejected || overallStatus === 'rejected') {
+    banner = `<div style="font-size:12px;color:#991b1b;margin-bottom:14px;padding:8px 12px;background:#fee2e2;border:1px solid #fecaca;border-radius:5px">✗ Rejected — one or more approvers have rejected this requisition</div>`;
+  } else if (allApproved || overallStatus === 'approved') {
+    banner = `<div style="font-size:12px;color:#166534;margin-bottom:14px;padding:8px 12px;background:#dcfce7;border:1px solid #bbf7d0;border-radius:5px">✓ Approved — all approvers have approved this requisition</div>`;
+  } else if (unresolvedConflicts.length > 0) {
+    // Explain each conflict and offer "Add alternate" — one form at a time
+    const conflictRows = unresolvedConflicts.map(({ s, i }) => {
+      const roleName    = esc((s.role || '').replace(/_/g, ' '));
+      const explanation = `<strong>${esc(s.name)}</strong> is the <em>${roleName}</em> for this cost centre but is also the requester — a requester may not approve their own requisition.`;
+      const formOpen = _showAlternateForm.has(i);
+      if (formOpen) {
+        return `<div style="margin-top:10px">
+          <div style="margin-bottom:6px;font-size:12px">${explanation}</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input id="alt-name-${i}" type="text" placeholder="Alternate name" style="border:1px solid #d1d5db;border-radius:4px;padding:4px 8px;font-size:12px;width:140px;font-family:inherit">
+            <input id="alt-email-${i}" type="email" placeholder="Email" style="border:1px solid #d1d5db;border-radius:4px;padding:4px 8px;font-size:12px;width:180px;font-family:inherit">
+            <button style="font-size:11px;height:28px;padding:0 10px;background:#6366f1" onclick="confirmAlternate(${i})">Assign</button>
+            <button class="ghost" style="font-size:11px;height:28px;padding:0 10px" onclick="cancelAlternateForm(${i})">Cancel</button>
           </div>
-        `).join('')}
+        </div>`;
+      }
+      return `<div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px">${explanation}</span>
+        <button class="ghost" style="font-size:11px;height:26px;padding:0 10px;flex-shrink:0" onclick="showAlternateForm(${i})">Assign alternate approver</button>
+      </div>`;
+    }).join('');
+    banner = `<div style="margin-bottom:14px;padding:10px 12px;background:#fef9c3;border:1px solid #fde68a;border-radius:5px">
+      <strong style="font-size:12px;color:#92400e">⚠ Alternate approver required</strong>
+      ${conflictRows}
+    </div>`;
+  } else {
+    banner = `<div style="font-size:12px;color:#6b7280;margin-bottom:14px">Waiting for responses from the following approvers:</div>`;
+  }
+
+  // ── Rows ──────────────────────────────────────────────────────────────────
+  const rows = [];
+  chain.forEach((s, i) => {
+    const alt = _alternateApprovers[i];
+    if (s.requiresAlternate) {
+      // Original row: always "Invalid" — requester can't approve their own requisition
+      rows.push(`<tr>
+        <td style="color:#9ca3af;text-decoration:line-through">${esc(s.name)}</td>
+        <td style="color:#9ca3af">${esc((s.role || '').replace(/_/g, ' '))}</td>
+        <td><span class="appr appr-invalid">Invalid</span></td>
+        <td></td>
+      </tr>`);
+      // Alternate row: pending slot or assigned approver with clickable chip
+      if (alt) {
+        const altStatus   = _approvalStates[`alt-${i}`] || 'pending';
+        const altChipCls  = altStatus === 'approved' ? 'appr-approved' : altStatus === 'rejected' ? 'appr-rejected' : 'appr-pending';
+        const altChipTxt  = altStatus === 'approved' ? 'Approved' : altStatus === 'rejected' ? 'Rejected' : 'Pending';
+        const remindBtn   = altStatus === 'pending'
+          ? `<button class="ghost" style="font-size:12px;padding:4px 10px" onclick="remindApprover(${JSON.stringify(alt.email)},${JSON.stringify(alt.name)})">Remind</button>`
+          : '';
+        rows.push(`<tr>
+          <td style="font-weight:500">${esc(alt.name)}</td>
+          <td style="color:#6b7280"><span class="chip chip-amber" style="font-size:10px">Alternate</span></td>
+          <td><span class="appr ${altChipCls}" style="cursor:pointer;user-select:none" title="Click to cycle status (demo)" onclick="cycleApproverStatus(${i},true)">${altChipTxt}</span></td>
+          <td>${remindBtn}</td>
+        </tr>`);
+      } else {
+        rows.push(`<tr>
+          <td style="color:#9ca3af;font-style:italic">— pending assignment —</td>
+          <td style="color:#9ca3af"><span class="chip chip-amber" style="font-size:10px">Alternate</span></td>
+          <td><span class="appr appr-pending">Pending</span></td>
+          <td></td>
+        </tr>`);
+      }
+    } else {
+      // Normal approver row
+      const apprStatus = _approvalStates[i] || 'pending';
+      const chipCls    = apprStatus === 'approved' ? 'appr-approved' : apprStatus === 'rejected' ? 'appr-rejected' : 'appr-pending';
+      const chipTxt    = apprStatus === 'approved' ? 'Approved' : apprStatus === 'rejected' ? 'Rejected' : 'Pending';
+      const remindBtn  = apprStatus === 'pending'
+        ? `<button class="ghost" style="font-size:12px;padding:4px 10px" onclick="remindApprover(${JSON.stringify(s.email)},${JSON.stringify(s.name)})">Remind</button>`
+        : '';
+      rows.push(`<tr>
+        <td style="font-weight:500">${esc(s.name)}</td>
+        <td style="color:#6b7280">${esc((s.role || '').replace(/_/g, ' '))}</td>
+        <td><span class="appr ${chipCls}" style="cursor:pointer;user-select:none" title="Click to cycle status (demo)" onclick="cycleApproverStatus(${i})">${chipTxt}</span></td>
+        <td>${remindBtn}</td>
+      </tr>`);
+    }
+  });
+
+  return card('Chain of approval', `
+    ${banner}
+    <table class="data-table"><thead><tr><th>Reviewer</th><th>Role</th><th>Status</th><th></th></tr></thead>
+    <tbody>${rows.join('')}</tbody></table>
+  `);
+}
+
+function remindApprover(email, name) {
+  alert(`Prototype — would send a reminder email to ${name} <${email}>.`);
+}
+
+// ── Mock approval cycle ────────────────────────────────────────────────────────
+// Cycles an approver's status Pending → Approved → Rejected → Pending.
+// isAlt: true when clicking the alternate-approver chip (keyed as 'alt-N').
+// When all required steps approve, submits the PO to the backend.
+// Reads clerk-edited form values so the submit endpoint can fill in data that
+// was missing in the original extraction (e.g. for needs_clarification cases).
+function collectFormValues() {
+  const supplier_id        = document.getElementById('input-supplier_id')?.value?.trim() || null;
+  const delivery_date      = document.getElementById('input-delivery_date')?.value?.trim() || null;
+  const currency           = document.getElementById('input-currency')?.value || null;
+  const cost_centre_code   = document.getElementById('input-cost_centre')?.value?.trim() || null;
+
+  // Reconstruct line items from the editable table rows.
+  const line_items = [];
+  document.querySelectorAll('#li-tbody tr.li-tr').forEach(row => {
+    const ridx  = row.dataset.row;
+    const desc  = document.getElementById(`input-li-desc-${ridx}`)?.value?.trim();
+    const qty   = parseFloat(document.getElementById(`input-li-qty-${ridx}`)?.value);
+    const price = parseFloat(document.getElementById(`input-li-price-${ridx}`)?.value);
+    const unit  = document.getElementById(`input-li-unit-${ridx}`)?.value?.trim() || 'pcs';
+    if (desc && !isNaN(qty) && qty > 0 && !isNaN(price) && price > 0) {
+      line_items.push({ description: desc, quantity: qty, unit_price: price, unit });
+    }
+  });
+
+  return { supplier_id, delivery_date, currency, cost_centre_code, line_items: line_items.length ? line_items : null };
+}
+
+async function cycleApproverStatus(idx, isAlt = false) {
+  const key   = isAlt ? `alt-${idx}` : idx;
+  const cycle = ['pending', 'approved', 'rejected'];
+  const cur   = _approvalStates[key] || 'pending';
+  _approvalStates[key] = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
+  persistApprovalState();  // fire-and-forget — survives navigation
+
+  const d     = window._detail;
+  const chain = d.resolution?.chain?.chain || [];
+
+  // A step counts as approved only if:
+  //   - it has no conflict (normal step): _approvalStates[i] === 'approved'
+  //   - it has a conflict (requiresAlternate): an alternate was assigned AND
+  //     _approvalStates['alt-i'] === 'approved'
+  const stepApproved = i => {
+    const s = chain[i];
+    if (s?.requiresAlternate) return !!_alternateApprovers[i] && _approvalStates[`alt-${i}`] === 'approved';
+    return _approvalStates[i] === 'approved';
+  };
+  const stepRejected = i => {
+    const s = chain[i];
+    if (s?.requiresAlternate) return !!_alternateApprovers[i] && _approvalStates[`alt-${i}`] === 'rejected';
+    return _approvalStates[i] === 'rejected';
+  };
+
+  const anyRejected = chain.some((_, i) => stepRejected(i));
+  const allApproved = chain.length > 0 && chain.every((_, i) => stepApproved(i));
+
+  if (anyRejected) {
+    fetch(`/api/requisition/${d.id}/reject`, { method: 'POST' })
+      .catch(err => console.warn('reject persist failed:', err));
+    reRenderDetail('rejected');
+  } else if (allApproved && !_poSubmitted) {
+    _poSubmitted = true;
+    reRenderDetail('approved');  // optimistic — show approved state immediately
+    try {
+      // Use clerk-edited form values if available (captured at submit-for-approval time).
+      // For pipeline-ready requisitions the form was never editable, so pass empty object.
+      const overrides = _clerkFormValues ?? {};
+      // Use fetch directly (not fetchJson) so we can distinguish fixable 422s from
+      // system errors and show an actionable "Fix data" banner instead of just failing.
+      const resp = await fetch(`/api/requisition/${d.id}/submit`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(overrides),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        _poSubmitted = false;
+        if (result.fixable) {
+          // A fixable data error (e.g. missing qty/price) — show the error banner
+          // and let the clerk go back to the editable form to correct the data.
+          _submitError = result.error;
+          reRenderDetail('waiting_approval');
+        } else {
+          console.error('PO submission failed:', result.error);
+          reRenderDetail('approved');  // keep optimistic; error logged to console
+        }
+        return;
+      }
+      if (result.poNumber) {
+        window._detail = { ...window._detail, po: { po_number: result.poNumber } };
+      }
+    } catch (err) {
+      _poSubmitted = false;
+      console.error('PO submission failed:', err.message ?? err);
+    }
+    reRenderDetail('approved');  // re-render with PO number (or error state)
+  } else if (allApproved) {
+    reRenderDetail('approved');  // already submitted, just keep the state
+  } else {
+    reRenderDetail('waiting_approval');
+  }
+}
+
+// ── Alternate approver management ─────────────────────────────────────────────
+
+// Fire-and-forget: saves _approvalStates + _alternateApprovers to DB so they
+// survive navigation and refresh. Called after every state change.
+function persistApprovalState() {
+  const d = window._detail;
+  if (!d) return;
+  fetch(`/api/requisition/${d.id}/approval-state`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ states: _approvalStates, alternates: _alternateApprovers }),
+  }).catch(err => console.warn('approval state persist failed:', err));
+}
+
+function showAlternateForm(idx) {
+  _showAlternateForm.add(idx);
+  reRenderDetail(_detailStatus || window._detail?.status);
+}
+function cancelAlternateForm(idx) {
+  _showAlternateForm.delete(idx);
+  reRenderDetail(_detailStatus || window._detail?.status);
+}
+function confirmAlternate(idx) {
+  const name  = document.getElementById(`alt-name-${idx}`)?.value?.trim();
+  const email = document.getElementById(`alt-email-${idx}`)?.value?.trim();
+  if (!name || !email) { alert('Please enter both name and email for the alternate approver.'); return; }
+  _alternateApprovers[idx] = { name, email };
+  _showAlternateForm.delete(idx);
+  persistApprovalState();
+  reRenderDetail(_detailStatus || window._detail?.status);
+}
+
+function poFormCard(d, ext, sol) {
+  if (!ext && !sol) return card('Purchase Order', '<div style="color:#9ca3af;font-size:13px">No data extracted yet.</div>');
+  const fc       = ext?.field_confidence || {};
+  const items    = ext?.line_items || [];
+  const supplier = sol?.supplier?.match;
+  const costCtr  = sol?.costCentre?.match;
+  const gl       = sol?.glAccount;
+  const delivery = sol?.delivery;
+  const currency = ext?.currency || 'CHF';
+  const rawTotal = rawTotalOf(ext);
+  const poNum    = d.po?.po_number;
+
+  // Build a set of review codes so each chip can be flagged independently.
+  // A blanket status-level alert (every chip yellow when needs_review) would
+  // mislead: a 95%-confidence supplier chip shouldn't be amber just because
+  // the delivery date is missing. Only flag the chip whose field was flagged.
+  const reviewCodes = new Set((d.reviewItems || []).map(r => r.code));
+
+  // Per-field alert levels — only 'security' (red) or 'warning' (amber) or null.
+  // The overall security banner already signals the block; individual fields should
+  // only be red when THEY are the specific cause (e.g. the supplier is blocked).
+  // A prompt-injection flag (security_flag) doesn't make extracted fields wrong.
+  const supAlert = (supplier?.status === 'blocked' || reviewCodes.has('blocked_supplier')) ? 'security'
+    : (sol?.supplier?.ambiguous || reviewCodes.has('unknown_supplier') || reviewCodes.has('ambiguous_supplier')) ? 'warning'
+    : null;
+  const delivAlert = reviewCodes.has('missing_delivery_date') ? 'warning' : null;
+  const ccAlert    = reviewCodes.has('missing_cost_centre')   ? 'warning' : null;
+  const liAlert    = reviewCodes.has('no_line_items')         ? 'warning' : null;
+
+  // Supplier display: name only — the red chip + warning below convey blocked status
+  const supDisplay = supplier?.name ?? null;
+  const supRaw  = supplier?.id ?? null;
+
+  // Cost centre: display code + name, input holds code
+  const ccDisplay = costCtr ? `${costCtr.code} — ${costCtr.name}` : null;
+  const ccRaw     = costCtr?.code ?? null;
+
+  // GL account: only populate if unambiguous (otherwise leave empty for ERP)
+  const glMatch     = gl?.match && !gl.ambiguous ? gl.match : null;
+  const glDisplay   = glMatch ? `${glMatch.code} — ${glMatch.name}` : null;
+  const glRaw       = glMatch?.code ?? null;
+
+  // Delivery date
+  const deliveryDate  = delivery?.date ? delivery.date.split('T')[0] : null;
+  const deliveryBasis = delivery?.basis || (delivery?.kind ? delivery.kind : null);
+
+  // Requisition reference (stored on submitted POs, else build from id)
+  const reqRef = d.po?.requisition_reference ?? (d.id ? `REQ-${d.id}` : null);
+
+  return card('Purchase Order', `
+    <div class="po-form">
+
+      <!-- ① Vendor ───────────────────────────────────── -->
+      <div class="po-group">
+        <div class="po-group-title">Vendor</div>
+        <div class="po-row po-row-2">
+          <div>
+            <div class="po-label">Supplier ID <span class="req">*</span></div>
+            ${aiChip('supplier_id', supDisplay, supRaw, fc.supplier_name, 'text', 'oninput="checkSubmitButton()"', 'Supplier ID (e.g. SUP-001)', supAlert)}
+            ${supplier?.status === 'blocked' ? '<div style="font-size:11px;color:#991b1b;margin-top:4px">⚠ Supplier is blocked in master data — requisition routed to security risk review.</div>' : ''}
+            ${sol?.supplier?.ambiguous ? '<div style="font-size:11px;color:#92400e;margin-top:4px">⚠ Ambiguous supplier match — verify before submitting.</div>' : ''}
+          </div>
+          <div>
+            <div class="po-label">Currency <span class="req">*</span></div>
+            <select class="po-input" id="input-currency" data-prev="${esc(currency)}" onchange="updateCurrency(this.value)">
+              ${['CHF','EUR','USD','GBP'].map(c => `<option value="${c}"${c===currency?' selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+        </div>
       </div>
+
+      <!-- ② Delivery ─────────────────────────────────── -->
+      <div class="po-group">
+        <div class="po-group-title">Delivery</div>
+        <div class="po-row po-row-1">
+          <div>
+            <div class="po-label">Requested delivery date <span class="req">*</span></div>
+            ${aiDateChip('delivery_date', deliveryDate, deliveryBasis, delivAlert, fc.delivery_date ?? null)}
+            ${!deliveryDate ? '<div style="font-size:11px;color:#92400e;margin-top:4px">No date resolved — enter a delivery date</div>' : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ Line Items ────────────────────────────────── -->
+      <div class="po-group">
+        <div class="po-group-title">Line items <span class="req">*</span></div>
+        <div style="padding:8px 0">
+          <table class="li-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th style="text-align:right" id="li-price-header">Unit price (${esc(currency)})</th>
+                <th style="text-align:right">Line total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="li-tbody">
+              ${items.length === 0
+                ? `<tr><td colspan="6" style="color:#9ca3af;font-size:12px;padding:10px 6px">No line items extracted — add a row below.</td></tr>`
+                : items.map((item, i) => lineItemRow(item, i, currency, true, liAlert, fc.line_items ?? null)).join('')}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4" class="li-tfoot-label">Total</td>
+                <td id="li-grand-total" class="li-tfoot-total">${esc(currency)} ${chf(rawTotal)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+          <button class="ghost" onclick="addLineItem()" style="margin-top:10px;font-size:12px;padding:5px 12px">+ Add row</button>
+        </div>
+      </div>
+
+      <!-- ④ Financial ─────────────────────────────────── -->
+      <div class="po-group">
+        <div class="po-group-title">Financial</div>
+        <div class="po-row po-row-2">
+          <div>
+            <div class="po-label" id="po-total-label">Total (${esc(currency)}) <span class="req">*</span></div>
+            <div class="po-total-display" id="po-financial-total">${esc(currency)} ${chf(rawTotal)}</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:3px">Calculated from line items · read-only</div>
+          </div>
+          <div>
+            <div class="po-label">Tax amount <span class="opt">(optional)</span></div>
+            <input class="po-input" id="input-tax_amount" type="number" step="0.01" min="0" placeholder="0.00">
+          </div>
+        </div>
+        <div class="po-row po-row-2">
+          <div>
+            <div class="po-label">Cost centre <span class="opt">(optional)</span></div>
+            ${aiChip('cost_centre', ccDisplay, ccRaw, fc.cost_centre ?? null, 'text', '', 'Cost centre (e.g. CC-1001)', ccAlert)}
+          </div>
+          <div>
+            <div class="po-label">GL account <span class="opt">(optional · ERP advisory)</span></div>
+            ${aiChip('gl_account', glDisplay, glRaw, fc.category_hint ?? null, 'text', '', 'GL account (e.g. 7500)', null)}
+            ${gl?.ambiguous ? '<div style="font-size:11px;color:#92400e;margin-top:4px">Ambiguous match — left blank for ERP</div>' : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑤ Reference ─────────────────────────────────── -->
+      <div class="po-group">
+        <div class="po-group-title">Reference</div>
+        <div class="po-row po-row-1">
+          <div>
+            <div class="po-label">Requisition reference <span class="opt">(optional · max 40 chars)</span></div>
+            ${aiChip('req_reference', reqRef ? reqRef.slice(0,40) : null, reqRef ? reqRef.slice(0,40) : null, 1.0, 'text', 'maxlength="40"', 'REQ-XXXXX (max 40 chars)')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Submitted banner ───────────────────────────── -->
+      ${poNum ? `
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">
+        <span style="font-size:20px;line-height:1">✓</span>
+        <div>
+          <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Submitted</div>
+          <div style="font-size:17px;font-weight:700;font-family:monospace;color:#166534">${esc(poNum)}</div>
+          ${d.po?.total_chf != null ? `<div style="font-size:12px;color:#4b7c58">CHF ${chf(d.po.total_chf)} (approval)</div>` : ''}
+        </div>
+      </div>` : ''}
+
     </div>
   `);
 }
 
-function num(n) { return typeof n === 'number' ? n.toFixed(2) : '—'; }
 function llmCard(calls) {
   if (!calls || !calls.length) return '';
   return card('LLM calls', `<table class="data-table"><thead><tr><th>Attempt</th><th>Model</th><th>Prompt</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost CHF</th><th class="num">Latency</th><th>OK</th></tr></thead><tbody>

@@ -63,5 +63,14 @@ export function initDb(path: string): Database.Database {
     );
   `);
 
+  // Migrate existing databases: add columns introduced after initial schema.
+  // SQLite has no ADD COLUMN IF NOT EXISTS, so check pragma_table_info first.
+  const reqCols = new Set(
+    (db.prepare("SELECT name FROM pragma_table_info('requisition')").all() as { name: string }[]).map(r => r.name)
+  );
+  if (!reqCols.has('approval_state_json')) {
+    db.exec("ALTER TABLE requisition ADD COLUMN approval_state_json TEXT");
+  }
+
   return db;
 }

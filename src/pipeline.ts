@@ -1,5 +1,4 @@
 import { readFileSync } from 'fs';
-import { createHash } from 'crypto';
 import type Database from 'better-sqlite3';
 import type { LlmClient } from './llm/client';
 import type { AppConfig } from './config';
@@ -9,13 +8,11 @@ import { selectAttachments } from './ingest/attachments';
 import { extractFromEmail, loadSystemPrompt } from './extraction/extract';
 import { resolveRequisition } from './resolution/resolve';
 import { decide } from './decision/decide';
-import { submitPO } from './output/submit';
 import {
   upsertRequisition,
   updateRequisitionStatus,
   logLlmCall,
   insertReviewItems,
-  insertPO,
   markRequisitionFailed,
 } from './output/audit';
 
@@ -114,40 +111,22 @@ export async function processEml(
     const decision = decide(extraction, resolution, config.thresholds);
 
     if (decision.status === 'ready') {
-      onStage?.('submit');
-      const idempotencyKey = computeIdempotencyKey(
-        email.messageId,
-        resolution.supplier?.match?.id ?? '',
-        resolution.computedTotalChf,
-      );
-
-      const po = await submitPO(config.poApiUrl, resolution, extraction, idempotencyKey);
-
-      insertPO(
-        db,
-        reqId,
-        po,
-        resolution.supplier!.match!.id,
-        resolution.computedTotalChf,
-        resolution.currency,
-        idempotencyKey,
-      );
-
-      updateRequisitionStatus(db, reqId, 'submitted', { extraction, resolution });
+      // All fields resolved — but PO submission is clerk-triggered after manual approval.
+      // Store as waiting_approval so the clerk can go through the approval chain in the UI.
+      updateRequisitionStatus(db, reqId, 'waiting_approval', { extraction, resolution });
 
       return {
-        status:            'submitted',
+        status:           'waiting_approval',
         emailPath,
-        messageId:         email.messageId,
-        poNumber:          po.poNumber,
-        totalChf:          resolution.computedTotalChf,
-        supplier:          resolution.supplier?.match?.name,
-        supplierId:        resolution.supplier?.match?.id,
-        costCentreCode:    resolution.costCentre?.match?.code,
-        currency:          resolution.currency,
-        approvalChainIds:  resolution.chain?.ok ? resolution.chain.chain.map(s => s.employeeId) : undefined,
-        hasDeliveryDate:   !!resolution.delivery.date,
-        lineItemCount:     extraction.line_items?.length ?? 0,
+        messageId:        email.messageId,
+        totalChf:         resolution.computedTotalChf,
+        supplier:         resolution.supplier?.match?.name,
+        supplierId:       resolution.supplier?.match?.id,
+        costCentreCode:   resolution.costCentre?.match?.code,
+        currency:         resolution.currency,
+        approvalChainIds: resolution.chain?.ok ? resolution.chain.chain.map(s => s.employeeId) : undefined,
+        hasDeliveryDate:  !!resolution.delivery.date,
+        lineItemCount:    extraction.line_items?.length ?? 0,
       };
     }
 
@@ -184,14 +163,4 @@ export async function processEml(
     }
     return { status: 'failed', emailPath, error: message };
   }
-}
-
-// D17: idempotency key = sha256(message_id + supplier_id + totalChf rounded to 2 dp).
-function computeIdempotencyKey(
-  messageId:  string,
-  supplierId: string,
-  totalChf:   number,
-): string {
-  const payload = `${messageId}|${supplierId}|${totalChf.toFixed(2)}`;
-  return createHash('sha256').update(payload).digest('hex');
 }

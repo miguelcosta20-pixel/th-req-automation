@@ -2,7 +2,7 @@
   "email_file": "data/emails/email_26.eml",
   "description": "Clean EUR order — Verpackung Schneider, CC-1005, band 2, explicit delivery date",
   "expected": {
-    "status": "submitted",
+    "status": "waiting_approval",
     "supplier_id": "SUP-025",
     "cost_centre_code": "CC-1005",
     "currency": "EUR",

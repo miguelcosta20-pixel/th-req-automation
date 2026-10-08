@@ -19,7 +19,7 @@ export const LabelSchema = z.object({
   email_file:  z.string(),
   description: z.string(),
   expected: z.object({
-    status:             z.enum(['submitted', 'needs_clarification', 'needs_human_review', 'security', 'failed']),
+    status:             z.enum(['waiting_approval', 'needs_clarification', 'needs_human_review', 'security', 'failed']),
     supplier_id:        z.string().nullable(),
     cost_centre_code:   z.string().nullable(),
     currency:           z.string().nullable(),
@@ -160,9 +160,8 @@ export async function runLabel(entry: LabelEntry, deps: EvalDeps): Promise<EvalR
   const latencyMs = Date.now() - t0;
   const checks    = checkLabel(entry.label, result);
 
-  // False auto-approval: the pipeline submitted a PO when the label says it
-  // should not have. This is the one failure mode that must never happen.
-  const falseApproval = result.status === 'submitted' && entry.label.expected.status !== 'submitted';
+  // Pipeline no longer auto-submits; false_approval is not possible at this stage.
+  const falseApproval = false;
 
   return { id: entry.id, label: entry.label, result, checks, latencyMs, error, falseApproval };
 }

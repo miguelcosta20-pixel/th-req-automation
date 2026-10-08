@@ -2,7 +2,7 @@
   "email_file": "eval/emails/eval_edge_01_per100.eml",
   "description": "Edge case: per-100-unit pricing — 5000 pcs × CHF 4.80/100 = CHF 240, band 1",
   "expected": {
-    "status": "submitted",
+    "status": "waiting_approval",
     "supplier_id": "SUP-012",
     "cost_centre_code": "CC-1001",
     "currency": "CHF",

@@ -27,6 +27,9 @@ import { initDb } from './db.js';
 import { AnthropicClient } from './llm/anthropic.js';
 import { processEml } from './pipeline.js';
 import { ingestEml } from './ingest/ingest.js';
+import { resolveRequisition } from './resolution/resolve.js';
+import { submitPO } from './output/submit.js';
+import { insertPO } from './output/audit.js';
 
 const PORT       = parseInt(process.env.DEMO_PORT ?? '3000', 10);
 const ROOT       = process.cwd();
@@ -37,6 +40,12 @@ const configPath = resolve(ROOT, 'config/toastwerk/config.json');
 const config = loadConfig(configPath);
 const client = new AnthropicClient();
 const db     = initDb(resolve(ROOT, config.dbPath));
+
+// FX rates from master data — exposed to the frontend via /api/state so the
+// demo UI can convert amounts when the clerk changes the PO currency.
+const masterDataPath = resolve(ROOT, config.masterDataPath);
+const masterData     = JSON.parse(readFileSync(masterDataPath, 'utf-8'));
+const fxRates: Record<string, number> = masterData._meta?.fx_rates_to_chf ?? { CHF: 1.0 };
 
 mkdirSync(inboxDir, { recursive: true });
 
@@ -132,7 +141,7 @@ interface RequisitionRow {
   received_at: string | null; created_at: string;
   extraction_json: string | null; resolution_json: string | null;
   draft_reply: string | null; email_path: string; message_id: string;
-  po_number: string | null;
+  po_number: string | null; approval_state_json: string | null;
 }
 
 function minConfidence(extraction: any): number | null {
@@ -197,6 +206,7 @@ function queueRows() {
   const rows = db.prepare(`
     SELECT r.id, r.status, r.subject, r.sender_name, r.sender_email,
            r.received_at, r.created_at, r.extraction_json, r.resolution_json,
+           r.approval_state_json,
            (SELECT po_number FROM po WHERE po.requisition_id = r.id) AS po_number
     FROM requisition r
     ORDER BY r.id DESC
@@ -217,6 +227,17 @@ function queueRows() {
     // Show the chain whether it passed or failed (the failed case now carries the
     // flagged steps, e.g. a requester-is-approver conflict).
     const steps = chainResult?.chain ?? null;
+
+    // Compute how many approvers have approved, using the persisted approval state.
+    const approvalState = safeParse<any>(r.approval_state_json);
+    const savedStates   = approvalState?.states   ?? {};
+    const savedAlts     = approvalState?.alternates ?? {};
+    const chainLen = steps?.length ?? 0;
+    const approvedCount = chainLen === 0 ? 0 : (steps as any[]).filter((s: any, i: number) => {
+      if (s.requiresAlternate) return !!savedAlts[i] && savedStates[`alt-${i}`] === 'approved';
+      return savedStates[i] === 'approved';
+    }).length;
+
     return {
       id:              r.id,
       status:          r.status,
@@ -226,8 +247,15 @@ function queueRows() {
       totalChf:        typeof sol?.computedTotalChf === 'number' ? sol.computedTotalChf : null,
       statedTotal:     statedTotal(ext),
       currency:        sol?.currency ?? ext?.currency ?? null,
-      chain:           steps ? steps.map((s: any) => ({ name: s.name, role: s.role, requiresAlternate: !!s.requiresAlternate })) : null,
+      chain: steps ? steps.map((s: any, i: number) => {
+        const stepStatus = s.requiresAlternate
+          ? (savedAlts[i] ? (savedStates[`alt-${i}`] ?? 'pending') : 'pending')
+          : (savedStates[i] ?? 'pending');
+        return { name: s.name, role: s.role, requiresAlternate: !!s.requiresAlternate, status: stepStatus };
+      }) : null,
       chainOk:         chainResult?.ok ?? null,
+      chainLength:     chainLen,
+      approvedCount,
       minConfidence:   minConfidence(ext),
       reason:          primaryReason(r.status, byReq.get(r.id) ?? [], chainResult),
       extractionFailed: !ext,
@@ -274,11 +302,13 @@ async function requisitionDetail(id: number) {
   return {
     id: r.id,
     status: r.status,
+    reason: primaryReason(r.status, reviewItems, safeParse<any>(r.resolution_json)?.chain ?? null),
     email,
     extraction: safeParse(r.extraction_json),
     resolution: safeParse(r.resolution_json),
     draftReply: r.draft_reply,
     reviewItems,
+    approvalState: safeParse(r.approval_state_json),
     po: po ? { ...po, api_response: safeParse(po.api_response_json) } : null,
     llmCalls,
   };
@@ -337,7 +367,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === 'GET' && path === '/api/state') {
-      sendJson(res, 200, { mockApi: await isMockApiUp(), dbPath: config.dbPath, customer: config.customer });
+      sendJson(res, 200, { mockApi: await isMockApiUp(), dbPath: config.dbPath, customer: config.customer, fxRates });
       return;
     }
 
@@ -368,6 +398,157 @@ const server = createServer(async (req, res) => {
 
     if (method === 'POST' && path === '/api/process') {
       await streamProcess(req, res);
+      return;
+    }
+
+    // Transitions a needs_human_review / needs_clarification requisition to
+    // waiting_approval, persisting the status so navigation doesn't reset it.
+    // Accepts optional clerk overrides (supplier_id, delivery_date, currency,
+    // line_items, cost_centre_code) and re-resolves so the chain and delivery
+    // date are always computed from the saved data, not from in-memory state.
+    const waitingMatch = path.match(/^\/api\/requisition\/(\d+)\/waiting$/);
+    if (method === 'POST' && waitingMatch) {
+      const id  = parseInt(waitingMatch[1], 10);
+      const row = db.prepare(`SELECT * FROM requisition WHERE id = ?`).get(id) as RequisitionRow | undefined;
+      if (!row) { sendJson(res, 404, { error: 'not found' }); return; }
+
+      const bodyText = (await readBody(req)).toString('utf-8').trim();
+      const overrides = safeParse<any>(bodyText) ?? {};
+
+      let ext = safeParse<any>(row.extraction_json) ?? {};
+
+      // Apply clerk overrides to the extraction so re-resolution picks them up.
+      if (overrides.delivery_date) {
+        ext = { ...ext, delivery: { ...(ext.delivery ?? {}), kind: 'explicit', explicit_date: overrides.delivery_date, timeframe: overrides.delivery_date, evidence: 'clerk override', reasoning: 'Date entered by clerk' } };
+      }
+      if (overrides.supplier_id) {
+        // Resolve the ID to a name so fuzzy matching in resolveRequisition works.
+        const supplier = config.masterData.suppliers.find((s: any) => s.id === overrides.supplier_id);
+        ext = { ...ext, supplier_name: supplier?.name ?? overrides.supplier_id };
+      }
+      if (overrides.cost_centre_code) {
+        ext = { ...ext, cost_centre_hint: overrides.cost_centre_code };
+      }
+      if (overrides.currency) {
+        ext = { ...ext, currency: overrides.currency };
+      }
+      if (Array.isArray(overrides.line_items) && overrides.line_items.length > 0) {
+        ext = { ...ext, line_items: overrides.line_items };
+      }
+
+      // Re-resolve with the updated extraction — recomputes chain, total, delivery.
+      const anchorDate = new Date(row.received_at ?? row.created_at);
+      const sol = resolveRequisition(ext, config.masterData, anchorDate, config.thresholds.defaultDeliveryLeadDays);
+
+      db.prepare(`
+        UPDATE requisition
+        SET status = 'waiting_approval', extraction_json = ?, resolution_json = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(JSON.stringify(ext), JSON.stringify(sol), id);
+
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // Persists the in-progress approval state (which approvers have approved/rejected
+    // and any alternate approver assignments) so it survives navigation and refresh.
+    const approvalStateMatch = path.match(/^\/api\/requisition\/(\d+)\/approval-state$/);
+    if (method === 'POST' && approvalStateMatch) {
+      const id = parseInt(approvalStateMatch[1], 10);
+      const row = db.prepare(`SELECT id FROM requisition WHERE id = ?`).get(id);
+      if (!row) { sendJson(res, 404, { error: 'not found' }); return; }
+      const bodyText = (await readBody(req)).toString('utf-8').trim();
+      db.prepare(`UPDATE requisition SET approval_state_json = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(bodyText, id);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // Marks a requisition as rejected when an approver declines it.
+    const rejectMatch = path.match(/^\/api\/requisition\/(\d+)\/reject$/);
+    if (method === 'POST' && rejectMatch) {
+      const id = parseInt(rejectMatch[1], 10);
+      const row = db.prepare(`SELECT id FROM requisition WHERE id = ?`).get(id);
+      if (!row) { sendJson(res, 404, { error: 'not found' }); return; }
+      db.prepare(`UPDATE requisition SET status = 'rejected', updated_at = datetime('now') WHERE id = ?`).run(id);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // Reverts a waiting_approval requisition back to needs_human_review so the
+    // clerk can edit the form and fix data errors caught at submission time.
+    const reopenMatch = path.match(/^\/api\/requisition\/(\d+)\/reopen$/);
+    if (method === 'POST' && reopenMatch) {
+      const id = parseInt(reopenMatch[1], 10);
+      const row = db.prepare(`SELECT id FROM requisition WHERE id = ?`).get(id);
+      if (!row) { sendJson(res, 404, { error: 'not found' }); return; }
+      db.prepare(`UPDATE requisition SET status = 'needs_human_review', updated_at = datetime('now') WHERE id = ?`).run(id);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // Clerk-initiated PO submission after the mock approval cycle completes.
+    // Idempotent: returns the existing PO number if the requisition was already submitted.
+    const submitMatch = path.match(/^\/api\/requisition\/(\d+)\/submit$/);
+    if (method === 'POST' && submitMatch) {
+      const id  = parseInt(submitMatch[1], 10);
+      const row = db.prepare(`SELECT * FROM requisition WHERE id = ?`).get(id) as RequisitionRow | undefined;
+      if (!row) { sendJson(res, 404, { error: 'requisition not found' }); return; }
+
+      const existing = db.prepare(`SELECT po_number FROM po WHERE requisition_id = ?`).get(id) as { po_number: string } | undefined;
+      if (existing) { sendJson(res, 200, { poNumber: existing.po_number, alreadySubmitted: true }); return; }
+
+      let ext = safeParse<any>(row.extraction_json);
+      let sol = safeParse<any>(row.resolution_json);
+      if (!ext || !sol) { sendJson(res, 400, { error: 'missing extraction or resolution data' }); return; }
+
+      // The clerk may have filled in fields that were missing in the original extraction
+      // (e.g. supplier or delivery date for needs_clarification requisitions). Accept
+      // those overrides from the request body so the PO can be created with the correct data.
+      const bodyText = (await readBody(req)).toString('utf-8').trim();
+      const overrides = safeParse<any>(bodyText) ?? {};
+
+      if (overrides.supplier_id && !sol.supplier?.match) {
+        sol = { ...sol, supplier: { match: { id: overrides.supplier_id, name: overrides.supplier_id }, ambiguous: false } };
+      }
+      if (overrides.delivery_date && !sol.delivery?.date) {
+        sol = { ...sol, delivery: { ...(sol.delivery ?? {}), date: overrides.delivery_date, kind: 'specific', basis: 'clerk override' } };
+      }
+      if (overrides.currency) {
+        sol = { ...sol, currency: overrides.currency };
+        ext = { ...ext, currency: overrides.currency };
+      }
+      if (Array.isArray(overrides.line_items) && overrides.line_items.length > 0) {
+        ext = { ...ext, line_items: overrides.line_items };
+      }
+
+      if (!sol.supplier?.match) { sendJson(res, 422, { error: 'supplier not resolved — enter a supplier ID and retry' }); return; }
+      if (!sol.delivery?.date)  { sendJson(res, 422, { error: 'delivery date not resolved — enter a delivery date and retry' }); return; }
+
+      // Validate line items: every submitted item must have a positive quantity and
+      // unit_price. Items extracted with null prices were silently dropped from the
+      // clerk form — catch that here so we never hit the PO API with a bad payload.
+      const items: any[] = ext.line_items ?? [];
+      if (items.length === 0) {
+        sendJson(res, 422, { error: 'No line items — go back and add at least one item with quantity and price.', fixable: true });
+        return;
+      }
+      const badItems = items.filter((it: any) => !(it.quantity > 0) || !(it.unit_price > 0));
+      if (badItems.length > 0) {
+        const names = badItems.map((it: any) => it.description || 'unnamed item').join(', ');
+        sendJson(res, 422, { error: `Line items missing quantity or price: ${names}. Go back and fill them in.`, fixable: true });
+        return;
+      }
+
+      try {
+        const idempotencyKey = row.message_id || `REQ-${id}`;
+        const po = await submitPO(config.poApiUrl, sol as any, ext as any, idempotencyKey);
+        insertPO(db, id, po, sol.supplier.match.id, sol.computedTotalChf ?? 0, sol.currency ?? ext.currency ?? 'CHF', idempotencyKey);
+        db.prepare(`UPDATE requisition SET status = 'approved', updated_at = datetime('now') WHERE id = ?`).run(id);
+        sendJson(res, 200, { poNumber: po.poNumber, status: po.status, warnings: po.warnings ?? [] });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
       return;
     }
 

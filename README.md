@@ -126,3 +126,5 @@ These are documented in full in [docs/decisions.md](docs/decisions.md). Short ve
 | A6 | Self-approval and duplicate roles: keep the step, flag `requiresAlternate`, route to human review (D27) |
 | A7 | Duplicate emails: idempotent — same email never creates two POs (D17) |
 | A8 | Vague delivery timing: explicit and resolvable-relative → concrete date; flexible low-urgency → standard lead time; high-urgency and silence → clarification (D28/D29/D32) |
+| A9 | PO approval: unanimous — all reviewers must approve; one rejection blocks the PO (A9) |
+| A10 | Blocked supplier: flags the requisition as security risk but does not prevent the clerk from submitting for approval (A10) |

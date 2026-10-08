@@ -2,7 +2,7 @@
   "email_file": "data/emails/email_48.eml",
   "description": "Clean EUR order — Kabelwerk Rheintal, CC-1002, band 2, tab-formatted table",
   "expected": {
-    "status": "submitted",
+    "status": "waiting_approval",
     "supplier_id": "SUP-010",
     "cost_centre_code": "CC-1002",
     "currency": "EUR",

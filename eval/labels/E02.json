@@ -2,7 +2,7 @@
   "email_file": "data/emails/email_43.eml",
   "description": "Clean CHF order — Rapid Prototyping Studio, CC-2003, band 2, explicit delivery date",
   "expected": {
-    "status": "submitted",
+    "status": "waiting_approval",
     "supplier_id": "SUP-024",
     "cost_centre_code": "CC-2003",
     "currency": "CHF",

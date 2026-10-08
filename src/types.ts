@@ -60,7 +60,7 @@ export interface Decision {
 
 // What the pipeline returns for each email.
 export interface ProcessResult {
-  status: 'submitted' | 'needs_clarification' | 'needs_human_review' | 'security' | 'duplicate' | 'failed';
+  status: 'waiting_approval' | 'needs_clarification' | 'needs_human_review' | 'security' | 'duplicate' | 'failed';
   emailPath: string;
   messageId?: string;
   poNumber?: string;

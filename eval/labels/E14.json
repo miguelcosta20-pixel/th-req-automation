@@ -2,7 +2,7 @@
   "email_file": "eval/emails/eval_edge_02_high_value.eml",
   "description": "Edge case: CFO approval band — CHF 180k, band 4, full 4-step chain",
   "expected": {
-    "status": "submitted",
+    "status": "waiting_approval",
     "supplier_id": "SUP-008",
     "cost_centre_code": "CC-1001",
     "currency": "CHF",

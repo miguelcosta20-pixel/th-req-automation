@@ -56,6 +56,8 @@ Fill these in as they are resolved. Reference the number in code comments and co
 | A4 | When information is missing, should the system draft a reply to the requester or only flag it? | Draft a reply and flag for the clerk | Open |
 | A5 | Is the PO created before or after approvals are collected? | To decide after reading the mock API | Open |
 | A6 | Requester equals approver, or one person holds two approval roles | Requester-as-approver → keep the step, flag it `requiresAlternate`, route to needs_human_review (D27). Duplicate roles for one person collapse to a single step, promoted to the higher role | Decided (D27) |
+| A9 | Can a PO go through with partial approvals? | No — unanimous approval is required. If any reviewer rejects, the PO is rejected. A single pending response is enough to keep the requisition in "waiting for approval". | Decided |
+| A10 | Does a blocked supplier prevent the clerk from submitting for approval? | No — the system flags the supplier as blocked (chip turns red, warning shown) but does not lock the form. The clerk can override and submit; the approvers then decide. | Decided |
 | A8 | How should vague or relative delivery timing be handled when no explicit date is given? | Classify (explicit/relative/urgency/none); resolve explicit + relative to a concrete date deterministically; a flexible/low-urgency request gets the standard lead time (D32); high-urgency and silence never get a date → clarification (D28, D29, D32) | Decided (D28/D29/D32) |
 | A7 | What happens with duplicate requisitions (same email, forwarded twice)? | Idempotent: the same email never creates two POs | Proposed |
 
