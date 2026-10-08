@@ -167,6 +167,7 @@ const REASON_LABELS: Record<string, string> = {
   missing_delivery_date: 'missing delivery date',
   low_confidence:        'low extraction confidence',
   extraction_failed:     'extraction failed',
+  processing_failed:     'processing failed',
   over_page_limit:       'attachment exceeds page limit',
 };
 const QUEUE_SEVERITY: Record<string, number> = { security: 0, human: 1, clarification: 2 };

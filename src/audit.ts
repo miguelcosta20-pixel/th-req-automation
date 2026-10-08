@@ -7,24 +7,56 @@ import type { SubmitResult } from './submit';
 
 // ── Requisition ───────────────────────────────────────────────────────────────
 
-export function insertRequisition(
+// Inserts the requisition row, or reuses an existing one for the same message-id
+// left behind by a prior failed attempt. Reuse clears that attempt's audit
+// children and resets the row to 'processing' so this run starts clean. A row
+// that already produced a PO is caught by the caller's idempotency check before
+// this is reached, so we never disturb a completed requisition.
+export function upsertRequisition(
   db:        Database.Database,
   email:     ParsedEmail,
   emailPath: string,
 ): number {
-  const stmt = db.prepare(`
-    INSERT INTO requisition (message_id, email_path, sender_name, sender_email, subject, received_at)
-    VALUES (@message_id, @email_path, @sender_name, @sender_email, @subject, @received_at)
-  `);
-  const result = stmt.run({
+  const fields = {
     message_id:   email.messageId,
     email_path:   emailPath,
-    sender_name:  email.from.name  ?? null,
+    sender_name:  email.from.name    ?? null,
     sender_email: email.from.address ?? null,
     subject:      email.subject,
     received_at:  email.receivedAt.toISOString(),
-  });
+  };
+
+  const existing = db.prepare(`SELECT id FROM requisition WHERE message_id = ?`)
+    .get(email.messageId) as { id: number } | undefined;
+
+  if (existing) {
+    db.prepare(`DELETE FROM llm_call    WHERE requisition_id = ?`).run(existing.id);
+    db.prepare(`DELETE FROM review_item WHERE requisition_id = ?`).run(existing.id);
+    db.prepare(`
+      UPDATE requisition
+      SET email_path = @email_path, sender_name = @sender_name, sender_email = @sender_email,
+          subject = @subject, received_at = @received_at,
+          status = 'processing', extraction_json = NULL, resolution_json = NULL, draft_reply = NULL,
+          updated_at = datetime('now')
+      WHERE id = @id
+    `).run({ ...fields, id: existing.id });
+    return existing.id;
+  }
+
+  const result = db.prepare(`
+    INSERT INTO requisition (message_id, email_path, sender_name, sender_email, subject, received_at)
+    VALUES (@message_id, @email_path, @sender_name, @sender_email, @subject, @received_at)
+  `).run(fields);
   return result.lastInsertRowid as number;
+}
+
+// Marks a requisition as failed when the pipeline threw partway through, and
+// records the error as a review item so the queue shows a reason instead of a
+// row stuck on 'processing'.
+export function markRequisitionFailed(db: Database.Database, reqId: number, error: string): void {
+  db.prepare(`UPDATE requisition SET status = 'failed', updated_at = datetime('now') WHERE id = ?`).run(reqId);
+  db.prepare(`INSERT INTO review_item (requisition_id, code, queue, detail) VALUES (?, 'processing_failed', 'human', ?)`)
+    .run(reqId, error.slice(0, 500));
 }
 
 export function updateRequisitionStatus(

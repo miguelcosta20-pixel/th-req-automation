@@ -11,11 +11,12 @@ import { resolveRequisition } from './resolve';
 import { decide } from './decide';
 import { submitPO } from './submit';
 import {
-  insertRequisition,
+  upsertRequisition,
   updateRequisitionStatus,
   logLlmCall,
   insertReviewItems,
   insertPO,
+  markRequisitionFailed,
 } from './audit';
 
 interface RunDeps {
@@ -36,6 +37,8 @@ export async function processEml(
 ): Promise<ProcessResult> {
   const systemPrompt = loadSystemPrompt();
   const model        = config.models.extraction;
+
+  let reqId: number | undefined;   // set once the requisition row exists; used by the catch
 
   try {
     onStage?.('ingest');
@@ -61,8 +64,9 @@ export async function processEml(
       };
     }
 
-    // Insert the requisition row so audit references are valid even on failure.
-    const reqId = insertRequisition(db, email, emailPath);
+    // Insert (or reuse a prior failed attempt's) requisition row so audit
+    // references are valid even on failure.
+    reqId = upsertRequisition(db, email, emailPath);
 
     // Attachments: select PDFs within page limit
     const { documentBlocks, overLimitFilenames } = selectAttachments(
@@ -171,11 +175,14 @@ export async function processEml(
     };
 
   } catch (err) {
-    return {
-      status:    'failed',
-      emailPath,
-      error:     err instanceof Error ? err.message : String(err),
-    };
+    const message = err instanceof Error ? err.message : String(err);
+    // A throw partway through leaves the requisition row behind — mark it failed
+    // (with the error as a review reason) so it is not stuck on 'processing' and
+    // a later run can cleanly reprocess it. Best-effort: never mask the original error.
+    if (reqId !== undefined) {
+      try { markRequisitionFailed(db, reqId, message); } catch { /* ignore */ }
+    }
+    return { status: 'failed', emailPath, error: message };
   }
 }
 
