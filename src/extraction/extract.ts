@@ -37,9 +37,10 @@ export async function extractFromEmail(
   client: LlmClient,
   systemPrompt: string,
   model: string,
+  isCorrection = false,
 ): Promise<ExtractResult> {
   const firstUserContent: ContentBlock[] = [
-    { type: 'text', text: formatEmailText(email) },
+    { type: 'text', text: formatEmailText(email, isCorrection) },
     ...documentBlocks,
   ];
 
@@ -143,16 +144,20 @@ function parseExtraction(text: string): { extraction: Extraction | null; parseEr
   }
 }
 
-function formatEmailText(email: ParsedEmail): string {
+function formatEmailText(email: ParsedEmail, isCorrection = false): string {
   const from = [email.from.name, email.from.address ? `<${email.from.address}>` : '']
     .filter(Boolean).join(' ');
   const body = email.textBody.trim() || '(empty email body)';
+
+  const correctionNote = isCorrection
+    ? 'NOTE: This email is a correction to a previous request. Extract only the final intended values.\n\n'
+    : '';
 
   return [
     `From: ${from || 'unknown'}`,
     `Subject: ${email.subject}`,
     `Date: ${email.receivedAt.toISOString()}`,
     '',
-    body,
+    correctionNote + body,
   ].join('\n');
 }

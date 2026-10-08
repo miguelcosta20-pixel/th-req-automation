@@ -23,13 +23,19 @@ export interface ResolveResult<T> {
   ambiguous: boolean;
 }
 
+// Returns the effective per-unit price, applying the per_100 basis when present.
+// Centralised here so the same factor is used in the CHF total (approval routing),
+// the PO document (submit), and any display code — one change corrects all three.
+export function effectiveUnitPrice(unitPrice: number, priceBasis?: string | null): number {
+  return priceBasis === 'per_100' ? unitPrice / 100 : unitPrice;
+}
+
 export interface FullResolution {
   supplier:         ResolveResult<Supplier> | null;
   costCentre:       ResolveResult<CostCentre> | null;
   employee:         ResolveResult<Employee> | null;
   glAccount:        ResolveResult<GlAccount> | null;
   currency:         string;
-  fxRate:           number;
   computedTotalChf: number;
   chain:            ChainResult | null;
   delivery:         ResolvedDelivery;
@@ -93,7 +99,6 @@ export function resolveGlAccount(hint: string, glAccounts: GlAccount[]): Resolve
 // lets an explicitly flexible request fall back to a standard lead time.
 export function resolveRequisition(extraction: Extraction, masterData: MasterData, anchorDate: Date, defaultLeadDays?: number): FullResolution {
   const currency = extraction.currency ?? 'CHF';
-  const fxRate   = masterData._meta.fx_rates_to_chf[currency] ?? 1;
 
   const supplier    = extraction.supplier_name
     ? resolveSupplier(extraction.supplier_name, masterData.suppliers)
@@ -114,9 +119,7 @@ export function resolveRequisition(extraction: Extraction, masterData: MasterDat
   // Compute raw total from line items (before FX conversion).
   const rawTotal = (extraction.line_items ?? []).reduce((sum, item) => {
     if (item.quantity == null || item.unit_price == null) return sum;
-    // price_basis 'per_100' means the unit_price is per 100 units, not per 1.
-    const factor = item.price_basis === 'per_100' ? 1 / 100 : 1;
-    return sum + item.quantity * item.unit_price * factor;
+    return sum + item.quantity * effectiveUnitPrice(item.unit_price, item.price_basis);
   }, 0);
 
   const computedTotalChf = convertToChf(rawTotal, currency, masterData._meta.fx_rates_to_chf);
@@ -124,7 +127,9 @@ export function resolveRequisition(extraction: Extraction, masterData: MasterDat
   // Build approval chain when we have a resolved cost centre.
   let chain: ChainResult | null = null;
   if (costCentre?.match) {
-    const requesterEmpId = employee?.match?.id ?? '';
+    // null means the requester is not in master data (external sender); buildApprovalChain
+    // skips the self-approval check in that case rather than comparing against ''.
+    const requesterEmpId = employee?.match?.id ?? null;
     chain = buildApprovalChain(
       costCentre.match.code,
       requesterEmpId,
@@ -133,10 +138,11 @@ export function resolveRequisition(extraction: Extraction, masterData: MasterDat
       masterData.cost_centers,
       masterData.departments,
       masterData.employees,
+      masterData.rules,
     );
   }
 
-  return { supplier, costCentre, employee, glAccount, currency, fxRate, computedTotalChf, chain, delivery: resolveDelivery(extraction.delivery, anchorDate, defaultLeadDays) };
+  return { supplier, costCentre, employee, glAccount, currency, computedTotalChf, chain, delivery: resolveDelivery(extraction.delivery, anchorDate, defaultLeadDays) };
 }
 
 function toResult<T>(results: FuseResult<T>[]): ResolveResult<T> {

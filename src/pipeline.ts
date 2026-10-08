@@ -61,9 +61,56 @@ export async function processEml(
       };
     }
 
-    // Insert (or reuse a prior failed attempt's) requisition row so audit
-    // references are valid even on failure.
-    reqId = upsertRequisition(db, email, emailPath);
+    // Correction detection: if this email replies to a known requisition that has
+    // not yet produced a PO, overwrite it in place rather than creating a new row.
+    // If the parent already has a PO (submitted before the correction arrived),
+    // fall through to normal processing — a separate row is created and the clerk
+    // handles the discrepancy manually.
+    let isCorrection = false;
+    reqId = (() => {
+      if (email.inReplyTo) {
+        const parent = db.prepare(`
+          SELECT r.id FROM requisition r
+          LEFT JOIN po ON po.requisition_id = r.id
+          WHERE r.message_id = ? AND po.id IS NULL
+        `).get(email.inReplyTo) as { id: number } | undefined;
+
+        if (parent) {
+          // Take over the parent's row: update its message_id to this email's id
+          // (so a second run of the correction is idempotent), clear stale audit data,
+          // and reset to processing.
+          db.prepare(`DELETE FROM llm_call    WHERE requisition_id = ?`).run(parent.id);
+          db.prepare(`DELETE FROM review_item WHERE requisition_id = ?`).run(parent.id);
+          db.prepare(`
+            UPDATE requisition
+            SET message_id    = @message_id,
+                email_path    = @email_path,
+                sender_name   = @sender_name,
+                sender_email  = @sender_email,
+                subject       = @subject,
+                received_at   = @received_at,
+                status        = 'processing',
+                extraction_json  = NULL,
+                resolution_json  = NULL,
+                draft_reply      = NULL,
+                updated_at    = datetime('now')
+            WHERE id = @id
+          `).run({
+            id:           parent.id,
+            message_id:   email.messageId,
+            email_path:   emailPath,
+            sender_name:  email.from.name    ?? null,
+            sender_email: email.from.address ?? null,
+            subject:      email.subject,
+            received_at:  email.receivedAt.toISOString(),
+          });
+          isCorrection = true;
+          return parent.id;
+        }
+      }
+      // Normal path: insert new row or reuse a prior failed attempt's row.
+      return upsertRequisition(db, email, emailPath);
+    })();
 
     // Attachments: select PDFs within page limit
     const { documentBlocks, overLimitFilenames } = selectAttachments(
@@ -88,6 +135,7 @@ export async function processEml(
       client,
       systemPrompt,
       model,
+      isCorrection,
     );
 
     for (const call of calls) logLlmCall(db, reqId, call);

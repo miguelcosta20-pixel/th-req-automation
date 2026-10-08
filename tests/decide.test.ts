@@ -55,7 +55,6 @@ const goodResolution: FullResolution = {
   },
   glAccount:        null,
   currency:         'EUR',
-  fxRate:           0.96,
   computedTotalChf: 120.0,
   chain:            { ok: true, chain: [APPROVER] },
   delivery:         resolvedDate,
@@ -185,5 +184,28 @@ describe('decide — escalation', () => {
     };
     const d = decide(goodExtraction, res, thresholds);
     expect(d.status).toBe('needs_human_review');
+  });
+});
+
+// ── Negative totals ───────────────────────────────────────────────────────────
+
+describe('decide — negative total', () => {
+  it('T66a — negative CHF total → human review with negative_total reason', () => {
+    const res: FullResolution = { ...goodResolution, computedTotalChf: -150.0 };
+    const d = decide(goodExtraction, res, thresholds);
+    expect(d.status).toBe('needs_human_review');
+    expect(d.reasons.some(r => r.code === 'negative_total' && r.queue === 'human')).toBe(true);
+  });
+
+  it('T66b — negative total detail mentions the CHF amount', () => {
+    const res: FullResolution = { ...goodResolution, computedTotalChf: -500.0 };
+    const d = decide(goodExtraction, res, thresholds);
+    expect(d.reasons.find(r => r.code === 'negative_total')?.detail).toContain('-500.00');
+  });
+
+  it('T66c — zero total does not trigger negative_total', () => {
+    const res: FullResolution = { ...goodResolution, computedTotalChf: 0 };
+    const d = decide(goodExtraction, res, thresholds);
+    expect(d.reasons.some(r => r.code === 'negative_total')).toBe(false);
   });
 });

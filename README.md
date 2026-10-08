@@ -26,7 +26,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 The mock API is a separate Python process. Start it before running the pipeline:
 
 ```bash
-python mock_po_api.py
+python3 tools/mock_po_api.py
 # listens on http://127.0.0.1:8080
 ```
 
@@ -59,6 +59,15 @@ Starts a browser-based clerk workbench and spawns the mock PO API automatically:
 npm run demo
 # open http://localhost:3000
 ```
+
+The queue is populated from the SQLite DB. To pre-load it with all the sample emails before opening the UI:
+
+```bash
+npm run cli -- run-all   # processes data/emails/*.eml → writes to the DB
+npm run demo             # then open http://localhost:3000
+```
+
+You can also add emails one at a time directly from the demo via the "Add email" dialog — drag and drop an `.eml` file and watch it process live.
 
 ## Evaluation harness
 
@@ -119,12 +128,14 @@ These are documented in full in [docs/decisions.md](docs/decisions.md). Short ve
 | # | Assumption |
 |---|---|
 | A1 | Approval band gaps: a total above a band's ceiling moves to the next band (D18) |
-| A2 | CHF total: VAT/shipping/discounts not yet specified — open question |
+| A2 | CHF total: prices are taken as stated (ex-VAT, no shipping/discount adjustment). A real deployment must confirm whether the ERP expects ex-VAT or inc-VAT totals |
 | A3 | FX: single rate from `master_data.json`, rounded once at the total (D19) |
 | A4 | Missing data: draft a clarification reply and flag for the clerk |
-| A5 | PO timing relative to approvals: open question |
+| A5 | PO timing: PO is created immediately on submission. Collecting approvers' responses is out of scope for the take-home — the approval chain determines routing, not a gate before submission |
 | A6 | Self-approval and duplicate roles: keep the step, flag `requiresAlternate`, route to human review (D27) |
-| A7 | Duplicate emails: idempotent — same email never creates two POs (D17) |
+| A7 | Duplicate emails: idempotent on message-ID — the same unmodified email never creates two POs. Known limitation: a forwarded copy has different headers and can produce a second PO; no cross-requisition deduplication exists |
 | A8 | Vague delivery timing: explicit and resolvable-relative → concrete date; flexible low-urgency → standard lead time; high-urgency and silence → clarification (D28/D29/D32) |
 | A9 | PO approval: unanimous — all reviewers must approve; one rejection blocks the PO (A9) |
 | A10 | Blocked supplier: flags the requisition as security risk but does not prevent the clerk from submitting for approval (A10) |
+| A11 | Cost centre is mandatory: without a resolved cost centre the approval chain cannot be determined. The clerk form enforces this — the submit button stays disabled until a valid cost centre is selected from the master-data list. |
+| A13 | Thread-aware corrections: if a correction email's `In-Reply-To` header matches an existing unsubmitted requisition, the pipeline overwrites that row in place and re-runs all stages. If the original PO was already submitted, the correction is treated as a new independent requisition — recalling a submitted PO is out of scope |

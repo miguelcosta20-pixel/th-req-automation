@@ -877,8 +877,24 @@ function removeAiChip(fieldId) {
   checkSubmitButton();
 }
 
-// Disable "Submit for approval" if any mandatory field is missing.
-// Mandatory: supplier_id, delivery_date, at least one line item with qty > 0 and price > 0.
+// Small annotation shown below a master-data dropdown when the AI pre-selected a value.
+// Lets the clerk see that a selection was made by the AI and how confident it was.
+function aiSelectHint(fieldId, hasAiValue, confidence, alertLevel) {
+  if (!hasAiValue) return '';
+  const pct = confidence != null ? Math.round(confidence * 100) : null;
+  const color = alertLevel === 'security' ? '#991b1b'
+    : (alertLevel === 'warning' || (pct != null && pct < 80)) ? '#92400e'
+    : '#6b7280';
+  const label = pct != null ? `AI matched · ${pct}% confidence` : 'AI matched';
+  return `<div id="ai-hint-${fieldId}" style="font-size:11px;color:${color};margin-top:3px"><span style="color:#6366f1">✦</span> ${label}</div>`;
+}
+
+function clearSelectHint(fieldId) {
+  document.getElementById('ai-hint-' + fieldId)?.remove();
+}
+
+
+// Mandatory: supplier_id, cost_centre, delivery_date, at least one line item with qty > 0 and price > 0.
 function checkSubmitButton() {
   const wrap = document.getElementById('submit-btn-wrap');
   const btn  = wrap?.querySelector('button.btn-submit-appr');
@@ -887,6 +903,9 @@ function checkSubmitButton() {
   const missing = [];
   const suppVal = document.getElementById('input-supplier_id')?.value?.trim();
   if (!suppVal) missing.push('supplier');
+
+  const ccVal = document.getElementById('input-cost_centre')?.value?.trim();
+  if (!ccVal) missing.push('cost centre');
 
   const dateVal = document.getElementById('input-delivery_date')?.value?.trim();
   if (!dateVal) missing.push('delivery date');
@@ -1310,6 +1329,18 @@ async function backToEdit() {
 function approvalChainSection(d, sol) {
   const cr    = sol?.chain;
   const chain = cr?.chain || [];
+
+  // cr === null means the cost centre couldn't be resolved, so no chain was computed.
+  // Distinct from cr.ok === true with an empty chain (total below lowest threshold).
+  if (!cr) {
+    return card('Chain of approval', `
+      <div style="padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;margin-bottom:12px">
+        <div style="font-weight:600;color:#991b1b;margin-bottom:4px">⚠ Approval chain could not be determined</div>
+        <div style="font-size:13px;color:#7f1d1d">The cost centre was not recognised — enter a valid code (e.g. CC-1001) and resubmit.</div>
+      </div>
+      <button class="ghost" style="color:#991b1b;border-color:#fca5a5" onclick="backToEdit()">Go back and fix</button>
+    `);
+  }
   if (!chain.length) {
     return card('Chain of approval', '<div style="color:#9ca3af;font-size:13px">No approvers required for this total.</div>');
   }
@@ -1441,6 +1472,7 @@ function collectFormValues() {
   const delivery_date      = document.getElementById('input-delivery_date')?.value?.trim() || null;
   const currency           = document.getElementById('input-currency')?.value || null;
   const cost_centre_code   = document.getElementById('input-cost_centre')?.value?.trim() || null;
+  const gl_account_code    = document.getElementById('input-gl_account')?.value?.trim() || null;
 
   // Reconstruct line items from the editable table rows.
   const line_items = [];
@@ -1455,7 +1487,7 @@ function collectFormValues() {
     }
   });
 
-  return { supplier_id, delivery_date, currency, cost_centre_code, line_items: line_items.length ? line_items : null };
+  return { supplier_id, delivery_date, currency, cost_centre_code, gl_account_code, line_items: line_items.length ? line_items : null };
 }
 
 async function cycleApproverStatus(idx, isAlt = false) {
@@ -1591,21 +1623,25 @@ function poFormCard(d, ext, sol) {
     : (sol?.supplier?.ambiguous || reviewCodes.has('unknown_supplier') || reviewCodes.has('ambiguous_supplier')) ? 'warning'
     : null;
   const delivAlert = reviewCodes.has('missing_delivery_date') ? 'warning' : null;
-  const ccAlert    = reviewCodes.has('missing_cost_centre')   ? 'warning' : null;
+  const ccMatchScore = sol?.costCentre?.score ?? 0;
+  const ccAlert    = reviewCodes.has('missing_cost_centre')                        ? 'warning'
+    : (ext?.cost_centre_hint && (!costCtr || ccMatchScore < 0.8))                  ? 'warning'
+    : null;
   const liAlert    = reviewCodes.has('no_line_items')         ? 'warning' : null;
 
-  // Supplier display: name only — the red chip + warning below convey blocked status
-  const supDisplay = supplier?.name ?? null;
+  // supRaw holds the resolved supplier ID for pre-selecting the dropdown
   const supRaw  = supplier?.id ?? null;
 
-  // Cost centre: display code + name, input holds code
-  const ccDisplay = costCtr ? `${costCtr.code} — ${costCtr.name}` : null;
-  const ccRaw     = costCtr?.code ?? null;
+  // Cost centre: pre-select the resolved code; fall back to the extracted hint so
+  // the dropdown lands on the right option even when resolution wasn't exact.
+  const ccRaw = costCtr?.code ?? ext?.cost_centre_hint ?? null;
 
-  // GL account: only populate if unambiguous (otherwise leave empty for ERP)
-  const glMatch     = gl?.match && !gl.ambiguous ? gl.match : null;
-  const glDisplay   = glMatch ? `${glMatch.code} — ${glMatch.name}` : null;
-  const glRaw       = glMatch?.code ?? null;
+  // GL account: pre-select if unambiguous; clerk can override
+  const glMatch  = gl?.match && !gl.ambiguous ? gl.match : null;
+  const glRaw    = glMatch?.code ?? null;
+  const glAlert  = gl?.ambiguous                             ? 'warning'
+    : (glRaw && (gl?.score ?? 1) < 0.8)                     ? 'warning'
+    : null;
 
   // Delivery date
   const deliveryDate  = delivery?.date ? delivery.date.split('T')[0] : null;
@@ -1622,8 +1658,12 @@ function poFormCard(d, ext, sol) {
         <div class="po-group-title">Vendor</div>
         <div class="po-row po-row-2">
           <div>
-            <div class="po-label">Supplier ID <span class="req">*</span></div>
-            ${aiChip('supplier_id', supDisplay, supRaw, fc.supplier_name, 'text', 'oninput="checkSubmitButton()"', 'Supplier ID (e.g. SUP-001)', supAlert)}
+            <div class="po-label">Supplier <span class="req">*</span></div>
+            <select class="po-input" id="input-supplier_id" onchange="checkSubmitButton();clearSelectHint('supplier_id')" style="${supAlert === 'security' ? 'box-shadow:0 0 0 2px #ef4444' : supAlert === 'warning' ? 'box-shadow:0 0 0 2px #f59e0b' : ''}">
+              <option value="">— select —</option>
+              ${_suppliers.map(s => `<option value="${esc(s.id)}"${supRaw === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}
+            </select>
+            ${aiSelectHint('supplier_id', !!supRaw, fc.supplier_name, supAlert)}
             ${supplier?.status === 'blocked' ? '<div style="font-size:11px;color:#991b1b;margin-top:4px">⚠ Supplier is blocked in master data — requisition routed to security risk review.</div>' : ''}
             ${sol?.supplier?.ambiguous ? '<div style="font-size:11px;color:#92400e;margin-top:4px">⚠ Ambiguous supplier match — verify before submitting.</div>' : ''}
           </div>
@@ -1696,12 +1736,20 @@ function poFormCard(d, ext, sol) {
         </div>
         <div class="po-row po-row-2">
           <div>
-            <div class="po-label">Cost centre <span class="opt">(optional)</span></div>
-            ${aiChip('cost_centre', ccDisplay, ccRaw, fc.cost_centre ?? null, 'text', '', 'Cost centre (e.g. CC-1001)', ccAlert)}
+            <div class="po-label">Cost centre <span class="req">*</span></div>
+            <select class="po-input" id="input-cost_centre" onchange="checkSubmitButton();clearSelectHint('cost_centre')" style="${ccAlert === 'warning' ? 'box-shadow:0 0 0 2px #f59e0b' : ''}">
+              <option value="">— select —</option>
+              ${_costCentres.map(c => `<option value="${esc(c.code)}"${ccRaw === c.code ? ' selected' : ''}>${esc(c.code)} — ${esc(c.name)}</option>`).join('')}
+            </select>
+            ${aiSelectHint('cost_centre', !!costCtr, fc.cost_centre, ccAlert)}
           </div>
           <div>
             <div class="po-label">GL account <span class="opt">(optional · ERP advisory)</span></div>
-            ${aiChip('gl_account', glDisplay, glRaw, fc.category_hint ?? null, 'text', '', 'GL account (e.g. 7500)', null)}
+            <select class="po-input" id="input-gl_account" onchange="clearSelectHint('gl_account')" style="${glAlert === 'warning' ? 'box-shadow:0 0 0 2px #f59e0b' : ''}">
+              <option value="">— select —</option>
+              ${_glAccounts.map(g => `<option value="${esc(g.code)}"${glRaw === g.code ? ' selected' : ''}>${esc(g.code)} — ${esc(g.name)}</option>`).join('')}
+            </select>
+            ${aiSelectHint('gl_account', !!glRaw, fc.category_hint, glAlert)}
             ${gl?.ambiguous ? '<div style="font-size:11px;color:#92400e;margin-top:4px">Ambiguous match — left blank for ERP</div>' : ''}
           </div>
         </div>
@@ -1743,7 +1791,7 @@ function llmCard(calls) {
 
 // ── Add-email dialog ──────────────────────────────────────────────────────────
 const STEPS = ['received','ingest','extract','resolve','decide','submit'];
-const STEP_LABELS = { received:'Received', ingest:'Ingest', extract:'LLM extract', resolve:'Resolve', decide:'Decide', submit:'Submit PO' };
+const STEP_LABELS = { received:'Email received', ingest:'Reading email', extract:'Extracting details', resolve:'Matching catalogue', decide:'Checking approval rules', submit:'Finishing up' };
 let loadedRaw = null;
 
 function openAddDialog() {
@@ -1801,26 +1849,35 @@ async function runProcess() {
       } else if (obj.type === 'done') {
         stepper.querySelectorAll('.step').forEach(el => el.classList.add('done'));
         if (obj.id) {
-          msg.innerHTML = `<div class="banner good">Processed → ${esc(obj.status)}. Opening…</div>`;
+          msg.innerHTML = `<div class="banner good">Email processed successfully. Opening…</div>`;
           justAddedId = obj.id;
           setTimeout(() => { closeAddDialog(); if (parseHash().name === 'detail') router(); else location.hash = '#/detail/' + obj.id; }, 650);
         } else {
-          msg.innerHTML = `<div class="banner bad">Finished with status ${esc(obj.status)} — ${esc(obj.result?.error || 'no requisition stored')}.</div>`;
+          msg.innerHTML = `<div class="banner bad">Processing could not complete — ${esc(obj.result?.error || 'please try again or contact support')}.</div>`;
         }
       } else if (obj.type === 'error') {
-        msg.innerHTML = `<div class="banner bad">Error: ${esc(obj.error)}</div>`;
+        msg.innerHTML = `<div class="banner bad">Something went wrong: ${esc(obj.error)}</div>`;
       }
     });
   } catch (err) {
-    msg.innerHTML = `<div class="banner bad">Network error: ${esc(err.message)}</div>`;
+    msg.innerHTML = `<div class="banner bad">Connection error — please check your network and try again.</div>`;
   } finally {
     go.disabled = false; sp.style.display = 'none'; tx.textContent = 'Process';
   }
 }
 
 // ── boot ──────────────────────────────────────────────────────────────────────
+let _costCentres = []; // [{ code, name }] — loaded once on boot
+let _glAccounts = [];  // [{ code, name }] — loaded once on boot
+let _suppliers = [];   // [{ id, name, status }] — loaded once on boot
+// Load master data before the first render so the clerk form dropdowns are always
+// populated. Both fetches are local and fast; awaiting them adds negligible delay.
 refreshState();
-router();
+Promise.all([
+  fetchJson('/api/cost-centres').then(list => { _costCentres = list ?? []; }).catch(() => {}),
+  fetchJson('/api/gl-accounts').then(list => { _glAccounts = list ?? []; }).catch(() => {}),
+  fetchJson('/api/suppliers').then(list => { _suppliers = list ?? []; }).catch(() => {}),
+]).finally(() => router());
 </script>
 </body>
 </html>

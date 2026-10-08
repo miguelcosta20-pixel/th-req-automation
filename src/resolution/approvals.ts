@@ -1,15 +1,5 @@
-import type { ApprovalBand, CostCentre, Department, Employee } from '../schema';
+import type { ApprovalBand, CostCentre, Department, Employee, Rules } from '../schema';
 
-// Role seniority (higher number = higher authority). Kept as the documented
-// hierarchy and asserted by tests; the chain builder no longer uses it for a
-// coverage check (see A6 / D27).
-export const ROLE_LEVEL: Record<string, number> = {
-  cost_center_owner: 1,
-  department_head: 2,
-  finance: 3,
-  cfo: 4,
-  ceo: 5,
-};
 
 export interface ApprovalStep {
   employeeId: string;
@@ -49,21 +39,22 @@ export function findBand(totalChf: number, bands: ApprovalBand[]): ApprovalBand 
 // Steps:
 //   1. Find the band for the CHF total.
 //   2. Resolve each required role to a real person; fail if any is unresolvable.
-//   3. Collapse duplicates — same person holding two roles appears once, promoted
-//      to the higher role (D rules, duplicate_role_collapses).
-//   4. Self-approval (A6): if the requester is one of the approvers, keep that
-//      step but flag it `requiresAlternate` and fail the chain. A requester may
-//      never approve their own requisition, so this routes to human review for
-//      an alternate approver — regardless of whether a higher role could "cover"
-//      the band. (Supersedes the old coverage rule, D20.)
+//   3. Collapse duplicates when rules.duplicate_role_collapses is true — same
+//      person holding two roles appears once, promoted to the higher role.
+//   4. Self-approval (A6 / D27) when rules.self_approval_forbidden is true: if
+//      the requester is one of the required approvers, keep that step but flag it
+//      requiresAlternate and fail the chain. requesterEmployeeId may be null when
+//      the requester is not in master data (external sender); in that case the
+//      self-approval check is skipped — there is no ID to compare against.
 export function buildApprovalChain(
-  costCentreCode: string,
-  requesterEmployeeId: string,
-  totalChf: number,
-  bands: ApprovalBand[],
-  costCentres: CostCentre[],
-  departments: Department[],
-  employees: Employee[],
+  costCentreCode:      string,
+  requesterEmployeeId: string | null,
+  totalChf:            number,
+  bands:               ApprovalBand[],
+  costCentres:         CostCentre[],
+  departments:         Department[],
+  employees:           Employee[],
+  rules:               Rules,
 ): ChainResult {
   const band = findBand(totalChf, bands);
 
@@ -82,11 +73,12 @@ export function buildApprovalChain(
 
   // Collapse: if the same person holds two required roles (required_roles is ordered
   // low→high), update their chain entry to the last (highest) role seen.
+  // Skipped when rules.duplicate_role_collapses is false — each role step is kept.
   const seenIdx = new Map<string, number>();
   const chain: ApprovalStep[] = [];
   for (const step of rawSteps) {
     const idx = seenIdx.get(step.employeeId);
-    if (idx !== undefined) {
+    if (idx !== undefined && rules.duplicate_role_collapses) {
       chain[idx] = step; // promote to higher role
     } else {
       seenIdx.set(step.employeeId, chain.length);
@@ -95,16 +87,20 @@ export function buildApprovalChain(
   }
 
   // Self-approval conflict: the requester is one of the required approvers.
-  const requesterIdx = chain.findIndex(s => s.employeeId === requesterEmployeeId);
-  if (requesterIdx !== -1) {
-    const flaggedChain = chain.map((s, i) =>
-      i === requesterIdx ? { ...s, requiresAlternate: true } : s);
-    const roleHuman = chain[requesterIdx].role.replace(/_/g, ' ');
-    return {
-      ok: false,
-      reason: `Requester is also the ${roleHuman} for this cost centre — an alternate approver is required`,
-      chain: flaggedChain,
-    };
+  // Skipped when rules.self_approval_forbidden is false, or when requesterEmployeeId
+  // is null (requester not in master data — no ID to compare against).
+  if (rules.self_approval_forbidden && requesterEmployeeId !== null) {
+    const requesterIdx = chain.findIndex(s => s.employeeId === requesterEmployeeId);
+    if (requesterIdx !== -1) {
+      const flaggedChain = chain.map((s, i) =>
+        i === requesterIdx ? { ...s, requiresAlternate: true } : s);
+      const roleHuman = chain[requesterIdx].role.replace(/_/g, ' ');
+      return {
+        ok: false,
+        reason: `Requester is also the ${roleHuman} for this cost centre — an alternate approver is required`,
+        chain: flaggedChain,
+      };
+    }
   }
 
   return { ok: true, chain };

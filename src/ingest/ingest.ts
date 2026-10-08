@@ -16,6 +16,9 @@ export async function ingestEml(raw: string | Buffer): Promise<ParsedEmail> {
 
   return {
     messageId,
+    // Strip angle brackets — mailparser may return <id@host> for In-Reply-To
+    // but stores messageId without them; normalise so DB lookups match.
+    inReplyTo: parsed.inReplyTo ? parsed.inReplyTo.replace(/^<|>$/g, '') : null,
     from: {
       name:    parsed.from?.value?.[0]?.name,
       address: parsed.from?.value?.[0]?.address,

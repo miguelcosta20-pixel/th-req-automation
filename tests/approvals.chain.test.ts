@@ -1,6 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { buildApprovalChain, ROLE_LEVEL } from '../src/resolution/approvals';
-import type { ApprovalBand, CostCentre, Department, Employee } from '../src/schema';
+import { buildApprovalChain } from '../src/resolution/approvals';
+import type { ApprovalBand, CostCentre, Department, Employee, Rules } from '../src/schema';
+
+const ROLE_LEVEL: Record<string, number> = {
+  cost_center_owner: 1,
+  department_head: 2,
+  finance: 3,
+  cfo: 4,
+  ceo: 5,
+};
+
+// Default rules match the Toastwerk master data (all three flags true).
+const DEFAULT_RULES: Rules = {
+  self_approval_forbidden:  true,
+  duplicate_role_collapses: true,
+  approvals_are_sequential: true,
+};
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 //
@@ -45,8 +60,8 @@ const EMPS: Employee[] = [
   { id: 'EMP-REQ',  name: 'Grace Req',      email: 'grace@co.com',  role: 'requester_only' },
 ];
 
-function chain(cc: string, requester: string, chf: number) {
-  return buildApprovalChain(cc, requester, chf, BANDS, CCS, DEPTS, EMPS);
+function chain(cc: string, requester: string | null, chf: number, rules = DEFAULT_RULES) {
+  return buildApprovalChain(cc, requester, chf, BANDS, CCS, DEPTS, EMPS, rules);
 }
 
 function ids(result: ReturnType<typeof chain>): string[] {
@@ -185,5 +200,50 @@ describe('edge cases', () => {
     expect(ROLE_LEVEL.cfo).toBeGreaterThan(ROLE_LEVEL.finance);
     expect(ROLE_LEVEL.finance).toBeGreaterThan(ROLE_LEVEL.department_head);
     expect(ROLE_LEVEL.department_head).toBeGreaterThan(ROLE_LEVEL.cost_center_owner);
+  });
+});
+
+// ── rules.self_approval_forbidden = false ────────────────────────────────────
+
+describe('rules.self_approval_forbidden = false', () => {
+  const rules: Rules = { ...DEFAULT_RULES, self_approval_forbidden: false };
+
+  it('T40 — requester=cc_owner, band 1 → ok (self-approval allowed)', () => {
+    const r = chain('CC-A', 'EMP-A1', 500, rules);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.chain.some(s => s.requiresAlternate)).toBe(false);
+  });
+
+  it('T41 — requester=dept_head, band 2 → ok, no step flagged', () => {
+    const r = chain('CC-A', 'EMP-A2', 5000, rules);
+    expect(r.ok).toBe(true);
+  });
+});
+
+// ── requesterEmployeeId = null (external sender, not in master data) ──────────
+
+describe('null requester (not in master data)', () => {
+  it('T42 — null requester, band 1 → ok, self-approval check skipped', () => {
+    // An external sender is never in the chain; skipping the check is correct.
+    const r = chain('CC-A', null, 500);
+    expect(r.ok).toBe(true);
+  });
+
+  it('T43 — null requester, band 3 → ok, full chain returned', () => {
+    const r = chain('CC-A', null, 25000);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.chain.map(s => s.employeeId)).toEqual(['EMP-A1', 'EMP-A2', 'EMP-FIN']);
+  });
+});
+
+// ── rules.duplicate_role_collapses = false ───────────────────────────────────
+
+describe('rules.duplicate_role_collapses = false', () => {
+  const rules: Rules = { ...DEFAULT_RULES, duplicate_role_collapses: false };
+
+  it('T44 — CC-DUAL band 2, no collapse → EMP-DUAL appears twice', () => {
+    const r = chain('CC-DUAL', 'EMP-REQ', 5000, rules);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.chain.map(s => s.employeeId)).toEqual(['EMP-DUAL', 'EMP-DUAL']);
   });
 });

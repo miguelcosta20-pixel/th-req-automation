@@ -28,7 +28,7 @@ function overallConfidence(extraction: Extraction): number {
 // Priority order (first matching rule wins for security; otherwise all reasons
 // are collected and the worst queue wins):
 //   1. instructions_to_reader populated → security (short-circuit)
-//   2. Supplier issues, chain failures → human queue
+//   2. Negative total, supplier issues, chain failures → human queue
 //   3. Missing delivery date, cost centre, empty items → clarification queue
 //   4. Confidence gate → human (< clarifyFloor) or clarification (< autoConfidence)
 //   5. No reasons → ready
@@ -53,7 +53,14 @@ export function decide(
 
   const reasons: ReviewReason[] = [];
 
-  // 2a. Supplier issues
+  // 2a. Negative total — credit notes and sign errors are unusual for a purchase
+  //     requisition and warrant human eyes before any PO is created.
+  if (resolution.computedTotalChf < 0) {
+    reasons.push({ code: 'negative_total', queue: 'human',
+      detail: `Computed total is CHF ${resolution.computedTotalChf.toFixed(2)} — credit note or sign error?` });
+  }
+
+  // 2b. Supplier issues
   if (!resolution.supplier?.match) {
     reasons.push({ code: 'unknown_supplier', queue: 'human',
       detail: `No supplier match for "${extraction.supplier_name}"` });

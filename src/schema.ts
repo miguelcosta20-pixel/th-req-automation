@@ -74,6 +74,7 @@ export type Department = z.infer<typeof DepartmentSchema>;
 export type Employee = z.infer<typeof EmployeeSchema>;
 export type ApprovalBand = z.infer<typeof ApprovalBandSchema>;
 export type GlAccount = z.infer<typeof GlAccountSchema>;
+export type Rules = z.infer<typeof RulesSchema>;
 export type MasterData = z.infer<typeof MasterDataSchema>;
 
 // ── LLM extraction output ─────────────────────────────────────────────────────

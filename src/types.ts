@@ -9,6 +9,7 @@ export interface ParsedAttachment {
 
 export interface ParsedEmail {
   messageId: string;
+  inReplyTo: string | null;
   from: { name?: string; address?: string };
   subject: string;
   textBody: string;

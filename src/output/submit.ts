@@ -1,6 +1,7 @@
 import { PoRequestSchema, PoResponseSchema } from '../schema';
 import type { Extraction, PoResponse } from '../schema';
 import type { FullResolution } from '../resolution/resolve';
+import { effectiveUnitPrice } from '../resolution/resolve';
 
 export interface SubmitResult {
   poNumber:  string;
@@ -28,11 +29,10 @@ export function buildPoLines(extraction: Extraction): { lineItems: PoLine[]; tot
   const lineItems: PoLine[] = (extraction.line_items ?? [])
     .filter(item => item.description && item.quantity != null && item.unit_price != null)
     .map(item => {
-      const factor = item.price_basis === 'per_100' ? 1 / 100 : 1;
       const line: PoLine = {
         item_name:  item.description,
         quantity:   item.quantity!,
-        unit_price: item.unit_price! * factor,
+        unit_price: effectiveUnitPrice(item.unit_price!, item.price_basis),
         unit:       item.unit ?? 'pcs',
       };
       if (item.item_code) line.item_code = item.item_code;
@@ -42,6 +42,10 @@ export function buildPoLines(extraction: Extraction): { lineItems: PoLine[]; tot
   const total = Math.round(lineItems.reduce((s, l) => s + l.quantity * l.unit_price, 0) * 100) / 100;
   return { lineItems, total };
 }
+
+// The mock PO API runs locally; 15 s is generous. Without a signal, a hung
+// HTTP call would block the entire run-all loop indefinitely.
+const PO_API_TIMEOUT_MS = 15_000;
 
 // Posts a purchase order to the mock API with idempotency protection.
 // The caller must ensure resolution.supplier.match is non-null (decided by decide()).
@@ -82,7 +86,8 @@ export async function submitPO(
       'Content-Type':    'application/json',
       'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify(body),
+    body:   JSON.stringify(body),
+    signal: AbortSignal.timeout(PO_API_TIMEOUT_MS),
   });
 
   const data = await response.json() as Record<string, unknown>;

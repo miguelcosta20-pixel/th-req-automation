@@ -27,9 +27,9 @@ import { initDb } from './db.js';
 import { AnthropicClient } from './llm/anthropic.js';
 import { processEml } from './pipeline.js';
 import { ingestEml } from './ingest/ingest.js';
-import { resolveRequisition } from './resolution/resolve.js';
+import { resolveRequisition, effectiveUnitPrice } from './resolution/resolve.js';
 import { submitPO } from './output/submit.js';
-import { insertPO } from './output/audit.js';
+import { insertPO, insertReviewItems } from './output/audit.js';
 
 const PORT       = parseInt(process.env.DEMO_PORT ?? '3000', 10);
 const ROOT       = process.cwd();
@@ -110,10 +110,21 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-function readBody(req: IncomingMessage): Promise<Buffer> {
+function readBody(req: IncomingMessage, maxBytes?: number): Promise<Buffer> {
   return new Promise((resolveBody, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
+    let totalBytes = 0;
+    req.on('data', (c: Buffer) => {
+      totalBytes += c.length;
+      if (maxBytes !== undefined && totalBytes > maxBytes) {
+        req.destroy();
+        const err = new Error(`Request body exceeds ${Math.round(maxBytes / 1024)} KB limit`);
+        (err as NodeJS.ErrnoException).code = 'BODY_TOO_LARGE';
+        reject(err);
+        return;
+      }
+      chunks.push(c);
+    });
     req.on('end',  () => resolveBody(Buffer.concat(chunks)));
     req.on('error', reject);
   });
@@ -159,7 +170,7 @@ function statedTotal(extraction: any): number | null {
   for (const i of items) {
     if (i.quantity == null || i.unit_price == null) continue;
     any = true;
-    sum += i.price_basis === 'per_100' ? (i.quantity * i.unit_price) / 100 : i.quantity * i.unit_price;
+    sum += i.quantity * effectiveUnitPrice(i.unit_price, i.price_basis);
   }
   return any ? sum : null;
 }
@@ -324,7 +335,7 @@ async function attachmentBytes(id: number, idx: number) {
 // ── Live single-email processing (NDJSON) ──────────────────────────────────────
 
 async function streamProcess(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const raw = (await readBody(req)).toString('utf-8').trim();
+  const raw = (await readBody(req, config.thresholds.pdfPageLimit * 200 * 1024)).toString('utf-8').trim();
   const emit = openStream(res);
 
   if (!raw) { emit({ type: 'error', error: 'Empty email body.' }); res.end(); return; }
@@ -371,6 +382,24 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method === 'GET' && path === '/api/cost-centres') {
+      const list = (config.masterData.cost_centers as any[]).map(c => ({ code: c.code, name: c.name }));
+      sendJson(res, 200, list);
+      return;
+    }
+
+    if (method === 'GET' && path === '/api/gl-accounts') {
+      const list = (config.masterData.gl_accounts as any[]).map(g => ({ code: g.code, name: g.name }));
+      sendJson(res, 200, list);
+      return;
+    }
+
+    if (method === 'GET' && path === '/api/suppliers') {
+      const list = (config.masterData.suppliers as any[]).map(s => ({ id: s.id, name: s.name, status: s.status ?? null }));
+      sendJson(res, 200, list);
+      return;
+    }
+
     if (method === 'GET' && path === '/api/queue') {
       sendJson(res, 200, queueRows());
       return;
@@ -388,9 +417,15 @@ const server = createServer(async (req, res) => {
     if (method === 'GET' && attMatch) {
       const att = await attachmentBytes(parseInt(attMatch[1], 10), parseInt(attMatch[2], 10));
       if (!att) { sendJson(res, 404, { error: 'no such attachment' }); return; }
+      // Force a safe content-type regardless of what the email claimed — the browser
+      // must not render an attachment as HTML or execute it as a script.
+      const isPdf = att.filename?.toLowerCase().endsWith('.pdf') ?? false;
+      const safeType = isPdf ? 'application/pdf' : 'application/octet-stream';
+      // Strip CR, LF and double-quotes to prevent header injection and quote escaping.
+      const safeFilename = (att.filename ?? 'attachment').replace(/[\r\n"]/g, '_');
       res.writeHead(200, {
-        'Content-Type': att.contentType || 'application/octet-stream',
-        'Content-Disposition': `inline; filename="${att.filename}"`,
+        'Content-Type': safeType,
+        'Content-Disposition': `inline; filename="${safeFilename}"`,
       });
       res.end(att.content);
       return;
@@ -412,7 +447,7 @@ const server = createServer(async (req, res) => {
       const row = db.prepare(`SELECT * FROM requisition WHERE id = ?`).get(id) as RequisitionRow | undefined;
       if (!row) { sendJson(res, 404, { error: 'not found' }); return; }
 
-      const bodyText = (await readBody(req)).toString('utf-8').trim();
+      const bodyText = (await readBody(req, 64 * 1024)).toString('utf-8').trim();
       const overrides = safeParse<any>(bodyText) ?? {};
 
       let ext = safeParse<any>(row.extraction_json) ?? {};
@@ -438,7 +473,14 @@ const server = createServer(async (req, res) => {
 
       // Re-resolve with the updated extraction — recomputes chain, total, delivery.
       const anchorDate = new Date(row.received_at ?? row.created_at);
-      const sol = resolveRequisition(ext, config.masterData, anchorDate, config.thresholds.defaultDeliveryLeadDays);
+      let sol = resolveRequisition(ext, config.masterData, anchorDate, config.thresholds.defaultDeliveryLeadDays);
+
+      // GL account override: the clerk may pick a different account than the AI inferred.
+      // Apply it directly to the resolution after re-resolve (it doesn't affect the chain).
+      if (overrides.gl_account_code) {
+        const gl = (config.masterData.gl_accounts as any[]).find(g => g.code === overrides.gl_account_code);
+        if (gl) sol = { ...sol, glAccount: { match: { code: gl.code, name: gl.name }, score: 1, ambiguous: false } };
+      }
 
       db.prepare(`
         UPDATE requisition
@@ -457,7 +499,7 @@ const server = createServer(async (req, res) => {
       const id = parseInt(approvalStateMatch[1], 10);
       const row = db.prepare(`SELECT id FROM requisition WHERE id = ?`).get(id);
       if (!row) { sendJson(res, 404, { error: 'not found' }); return; }
-      const bodyText = (await readBody(req)).toString('utf-8').trim();
+      const bodyText = (await readBody(req, 64 * 1024)).toString('utf-8').trim();
       db.prepare(`UPDATE requisition SET approval_state_json = ?, updated_at = datetime('now') WHERE id = ?`)
         .run(bodyText, id);
       sendJson(res, 200, { ok: true });
@@ -505,7 +547,7 @@ const server = createServer(async (req, res) => {
       // The clerk may have filled in fields that were missing in the original extraction
       // (e.g. supplier or delivery date for needs_clarification requisitions). Accept
       // those overrides from the request body so the PO can be created with the correct data.
-      const bodyText = (await readBody(req)).toString('utf-8').trim();
+      const bodyText = (await readBody(req, 64 * 1024)).toString('utf-8').trim();
       const overrides = safeParse<any>(bodyText) ?? {};
 
       if (overrides.supplier_id && !sol.supplier?.match) {
@@ -543,9 +585,26 @@ const server = createServer(async (req, res) => {
       try {
         const idempotencyKey = row.message_id || `REQ-${id}`;
         const po = await submitPO(config.poApiUrl, sol as any, ext as any, idempotencyKey);
-        insertPO(db, id, po, sol.supplier.match.id, sol.computedTotalChf ?? 0, sol.currency ?? ext.currency ?? 'CHF', idempotencyKey);
-        db.prepare(`UPDATE requisition SET status = 'approved', updated_at = datetime('now') WHERE id = ?`).run(id);
-        sendJson(res, 200, { poNumber: po.poNumber, status: po.status, warnings: po.warnings ?? [] });
+
+        // The HTTP call succeeded — record the PO and flip the status atomically.
+        // If this DB write fails, the PO exists in the API but has no local record;
+        // flag it for human reconciliation rather than silently re-submitting on retry.
+        try {
+          db.transaction(() => {
+            insertPO(db, id, po, sol.supplier.match.id, sol.computedTotalChf ?? 0, sol.currency ?? ext.currency ?? 'CHF', idempotencyKey);
+            db.prepare(`UPDATE requisition SET status = 'approved', updated_at = datetime('now') WHERE id = ?`).run(id);
+          })();
+          sendJson(res, 200, { poNumber: po.poNumber, status: po.status, warnings: po.warnings ?? [] });
+        } catch (dbErr) {
+          // Best-effort: record the orphaned PO number so a human can reconcile.
+          const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+          try {
+            insertReviewItems(db, id, [{ code: 'po_write_failed', queue: 'human' as const,
+              detail: `PO ${po.poNumber} was created by the API but could not be recorded: ${dbMsg}` }]);
+            db.prepare(`UPDATE requisition SET status = 'needs_human_review', updated_at = datetime('now') WHERE id = ?`).run(id);
+          } catch { /* ignore — at least the API-level error is reported to the clerk */ }
+          sendJson(res, 500, { error: `PO ${po.poNumber} was created but could not be saved locally — flagged for reconciliation.` });
+        }
       } catch (err) {
         sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
       }
@@ -555,8 +614,12 @@ const server = createServer(async (req, res) => {
     sendJson(res, 404, { error: 'not found', path });
   } catch (err) {
     console.error(err);
-    if (!res.headersSent) sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
-    else res.end();
+    if (!res.headersSent) {
+      const status = (err as NodeJS.ErrnoException)?.code === 'BODY_TOO_LARGE' ? 413 : 500;
+      sendJson(res, status, { error: err instanceof Error ? err.message : String(err) });
+    } else {
+      res.end();
+    }
   }
 });
 

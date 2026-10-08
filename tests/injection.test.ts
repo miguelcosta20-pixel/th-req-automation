@@ -43,7 +43,7 @@ const cleanResolution: FullResolution = {
     match: { id: 'EMP-105', name: 'Alice Buyer', email: 'alice@toastwerk.de', role: 'requester_only' },
     score: 0.95, ambiguous: false,
   },
-  currency: 'EUR', fxRate: 0.96, computedTotalChf: 163.2,
+  currency: 'EUR', computedTotalChf: 163.2,
   glAccount: null,
   chain: { ok: true, chain: [{ employeeId: 'EMP-501', name: 'Andrea Roth', email: 'andrea.roth@customer.com', role: 'department_head' }] },
   delivery: { kind: 'explicit', date: '2026-11-20', basis: 'explicit', urgency: null, timeframe: null, evidence: 'by 20 Nov', reasoning: null, note: null },
