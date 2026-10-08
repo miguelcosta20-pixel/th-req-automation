@@ -9,6 +9,6 @@
     "pdfPageLimit": 15
   },
   "models": {
-    "extraction": "claude-sonnet-5-5"
+    "extraction": "claude-sonnet-4-6"
   }
 }
