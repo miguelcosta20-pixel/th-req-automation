@@ -1,6 +1,8 @@
 import type { ApprovalBand, CostCentre, Department, Employee } from './schema';
 
-// Role hierarchy for coverage checks. Higher number = higher authority.
+// Role seniority (higher number = higher authority). Kept as the documented
+// hierarchy and asserted by tests; the chain builder no longer uses it for a
+// coverage check (see A6 / D27).
 export const ROLE_LEVEL: Record<string, number> = {
   cost_center_owner: 1,
   department_head: 2,
@@ -14,11 +16,16 @@ export interface ApprovalStep {
   name: string;
   email: string;
   role: string;
+  // Set when this approver is also the requester. Self-approval is forbidden, so
+  // the step is kept (not dropped) and flagged for a human to assign an alternate.
+  requiresAlternate?: boolean;
 }
 
 export type ChainResult =
   | { ok: true; chain: ApprovalStep[] }
-  | { ok: false; reason: string };
+  // On failure we still return the chain when we have one, so the UI can show the
+  // flagged steps (e.g. a requester-is-approver conflict) rather than nothing.
+  | { ok: false; reason: string; chain?: ApprovalStep[] };
 
 // Finds the approval band for a given CHF total.
 //
@@ -42,11 +49,13 @@ export function findBand(totalChf: number, bands: ApprovalBand[]): ApprovalBand 
 // Steps:
 //   1. Find the band for the CHF total.
 //   2. Resolve each required role to a real person; fail if any is unresolvable.
-//   3. Collapse duplicates — same person holding two roles appears once (D rules).
-//   4. Remove the requester (self-approval forbidden, D rules).
-//   5. Coverage check (D20): the highest role level remaining in the chain must
-//      be >= the highest role level required by the band. A person at level N
-//      implicitly covers all levels below N. If coverage fails → needs_human_review.
+//   3. Collapse duplicates — same person holding two roles appears once, promoted
+//      to the higher role (D rules, duplicate_role_collapses).
+//   4. Self-approval (A6): if the requester is one of the approvers, keep that
+//      step but flag it `requiresAlternate` and fail the chain. A requester may
+//      never approve their own requisition, so this routes to human review for
+//      an alternate approver — regardless of whether a higher role could "cover"
+//      the band. (Supersedes the old coverage rule, D20.)
 export function buildApprovalChain(
   costCentreCode: string,
   requesterEmployeeId: string,
@@ -72,8 +81,7 @@ export function buildApprovalChain(
   }
 
   // Collapse: if the same person holds two required roles (required_roles is ordered
-  // low→high), update their chain entry to the last (highest) role seen so the
-  // coverage check sees the correct level.
+  // low→high), update their chain entry to the last (highest) role seen.
   const seenIdx = new Map<string, number>();
   const chain: ApprovalStep[] = [];
   for (const step of rawSteps) {
@@ -86,29 +94,20 @@ export function buildApprovalChain(
     }
   }
 
-  // Remove requester
-  const withoutRequester = chain.filter(s => s.employeeId !== requesterEmployeeId);
-
-  // Coverage check: max level remaining must >= max level required
-  const requiredMaxLevel = band.required_roles.reduce(
-    (max, role) => Math.max(max, ROLE_LEVEL[role] ?? 0),
-    0,
-  );
-  const remainingMaxLevel = withoutRequester.reduce(
-    (max, step) => Math.max(max, ROLE_LEVEL[step.role] ?? 0),
-    Number.NEGATIVE_INFINITY,
-  );
-
-  if (remainingMaxLevel < requiredMaxLevel) {
+  // Self-approval conflict: the requester is one of the required approvers.
+  const requesterIdx = chain.findIndex(s => s.employeeId === requesterEmployeeId);
+  if (requesterIdx !== -1) {
+    const flaggedChain = chain.map((s, i) =>
+      i === requesterIdx ? { ...s, requiresAlternate: true } : s);
+    const roleHuman = chain[requesterIdx].role.replace(/_/g, ' ');
     return {
       ok: false,
-      reason:
-        `Requester ${requesterEmployeeId} is in the approval chain; ` +
-        `remaining max level ${remainingMaxLevel} < required ${requiredMaxLevel}`,
+      reason: `Requester is also the ${roleHuman} for this cost centre — an alternate approver is required`,
+      chain: flaggedChain,
     };
   }
 
-  return { ok: true, chain: withoutRequester };
+  return { ok: true, chain };
 }
 
 function resolvePersonForRole(

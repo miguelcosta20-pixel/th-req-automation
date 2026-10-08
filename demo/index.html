@@ -65,6 +65,23 @@ select { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 10px; font-
 .chip-gray  { background: #f3f4f6; color: #4b5563; }
 .chip-purple{ background: #ede9fe; color: #5b21b6; }
 
+/* ── Queue: count pills, approver chips, controls ───────────────── */
+.count-pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
+.count-pill { cursor: pointer; border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; padding: 7px 13px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #334155; }
+.count-pill:hover { border-color: #c7d2fe; }
+.count-pill.active { border-color: #6366f1; background: #eef2ff; }
+.count-pill .n { font-weight: 700; font-size: 15px; }
+.count-pill .cdot { width: 8px; height: 8px; border-radius: 50%; }
+.q-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+input.search { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 10px; font-size: 13px; min-width: 200px; outline: none; }
+input.search:focus { border-color: #6366f1; }
+.appr { display: inline-flex; align-items: center; font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: 500; }
+.appr-pending  { background: #f3f4f6; color: #4b5563; }
+.appr-approved { background: #dcfce7; color: #166534; }
+.appr-rejected { background: #fee2e2; color: #991b1b; }
+.appr-alt      { background: #fef9c3; color: #92400e; }
+td.po-col { white-space: nowrap; min-width: 140px; }
+
 /* ── Confidence bar ─────────────────────────────────────────────── */
 .conf-wrap { display: flex; align-items: center; gap: 6px; }
 .conf-bar-bg { height: 6px; width: 70px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
@@ -230,12 +247,6 @@ function confBar(c) {
   const cls = c >= 0.8 ? 'conf-high' : c >= 0.5 ? 'conf-medium' : 'conf-low';
   return `<div class="conf-wrap"><div class="conf-bar-bg"><div class="conf-bar ${cls}" style="width:${pct}%"></div></div><span class="conf-val">${pct}%</span></div>`;
 }
-function chainHtml(chain, ok, failReason) {
-  if (!chain || chain.length === 0) return `<span class="chip chip-${ok ? 'gray' : 'red'}">${ok ? 'no approvers needed' : esc(failReason ?? 'chain failed')}</span>`;
-  return `<div class="chain-list">${chain.map((s,i) =>
-    `${i>0 ? '<span class="chain-arrow">→</span>' : ''}<div class="chain-step"><span class="chip chip-green">${esc(s.name)}</span><span class="role">${esc((s.role??'').replace(/_/g,' '))}</span></div>`
-  ).join('')}</div>`;
-}
 async function fetchJson(url, opts) {
   const res = await fetch(url, opts);
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -286,44 +297,106 @@ async function refreshState() {
 
 // ── Queue ───────────────────────────────────────────────────────────────────────
 let justAddedId = null;   // highlights the row for a freshly processed email
+const qState = { status: '', search: '', sort: 'priority' };
+
+// Default sort order: most-urgent statuses first.
+const STATUS_PRIORITY = { security: 0, needs_human_review: 1, needs_clarification: 2, submitted: 3, duplicate: 4, failed: 5, processing: 6 };
+const STATUS_DOT = { security: '#ef4444', needs_human_review: '#f97316', needs_clarification: '#eab308', submitted: '#22c55e', duplicate: '#8b5cf6', failed: '#9ca3af', processing: '#38bdf8' };
+const PILL_ORDER = ['security', 'needs_human_review', 'needs_clarification', 'submitted', 'duplicate', 'failed'];
+const PILL_LABEL = { security: 'security', needs_human_review: 'human review', needs_clarification: 'clarification', submitted: 'submitted', duplicate: 'duplicate', failed: 'failed' };
+
 async function renderQueue() {
   const rows = await fetchJson('/api/queue');
-  const statuses = [...new Set(rows.map(r => r.status))].sort();
+  window._queue = rows;
+  const counts = {}; rows.forEach(r => counts[r.status] = (counts[r.status] || 0) + 1);
+  const pills = PILL_ORDER.filter(s => counts[s]).map(s =>
+    `<div class="count-pill" data-status="${s}"><span class="cdot" style="background:${STATUS_DOT[s]}"></span>${PILL_LABEL[s]} <span class="n">${counts[s]}</span></div>`).join('');
+
   view.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <div><div class="page-title">Queue</div><div class="page-sub">${rows.length} processed requisition${rows.length===1?'':'s'} · newest first</div></div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select id="filter"><option value="">All statuses</option>${statuses.map(s=>`<option value="${esc(s)}">${esc(s.replace(/_/g,' '))}</option>`).join('')}</select>
+      <div><div class="page-title">Queue</div><div class="page-sub" id="q-sub"></div></div>
+      <div class="q-controls">
+        <input class="search" id="q-search" placeholder="Search requester or supplier…" value="${esc(qState.search)}">
+        <select id="q-sort">
+          <option value="priority">Sort: priority</option>
+          <option value="newest">Sort: newest first</option>
+        </select>
         <button class="ghost" onclick="renderQueue()">↻ Refresh</button>
         <button onclick="openAddDialog()">+ New email</button>
       </div>
     </div>
+    <div class="count-pills" id="q-pills"><div class="count-pill" data-status=""><span class="cdot" style="background:#64748b"></span>all <span class="n">${rows.length}</span></div>${pills}</div>
     ${rows.length === 0
       ? `<div class="card"><div class="empty">No requisitions yet.<br><button style="margin-top:12px" onclick="openAddDialog()">+ Add the first one</button></div></div>`
       : `<div class="card"><table class="data-table"><thead><tr>
-          <th>Requester</th><th>Supplier</th><th class="num">CHF total</th><th>Approval chain</th><th>Status</th><th>Min conf.</th><th>PO</th>
-        </tr></thead><tbody id="qbody">${rows.map(queueRowHtml).join('')}</tbody></table></div>`}
+          <th>ID</th><th>Received</th><th>Requester</th><th>Supplier</th><th class="num">CHF total</th><th>Approval chain</th><th>Status</th><th>Reason</th><th>Min conf.</th><th>PO</th>
+        </tr></thead><tbody id="qbody"></tbody></table></div>`}
   `;
-  const filter = $('#filter');
-  if (filter) filter.addEventListener('change', () => {
-    const v = filter.value;
-    $('#qbody').innerHTML = rows.filter(r => !v || r.status === v).map(queueRowHtml).join('');
-  });
+
+  $('#q-sort').value = qState.sort;
+  $('#q-sort').addEventListener('change', e => { qState.sort = e.target.value; applyRows(); });
+  $('#q-search').addEventListener('input', e => { qState.search = e.target.value; applyRows(); });
+  document.querySelectorAll('#q-pills .count-pill').forEach(p => p.addEventListener('click', () => {
+    const s = p.dataset.status;
+    qState.status = (qState.status === s) ? '' : s;   // toggle off if already active
+    applyRows();
+  }));
+
+  applyRows();
   if (justAddedId) {
     const el = $('#qrow-' + justAddedId);
     if (el) { el.classList.add('flash'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     justAddedId = null;
   }
 }
+
+function applyRows() {
+  const rows = window._queue || [];
+  const q = qState.search.trim().toLowerCase();
+  let filtered = rows.filter(r =>
+    (!qState.status || r.status === qState.status) &&
+    (!q || (r.requester || '').toLowerCase().includes(q) || (r.supplier || '').toLowerCase().includes(q)));
+
+  const recv = r => new Date(r.receivedAt || r.createdAt || 0).getTime();
+  filtered.sort((a, b) => qState.sort === 'newest'
+    ? recv(b) - recv(a) || b.id - a.id
+    : (STATUS_PRIORITY[a.status] ?? 9) - (STATUS_PRIORITY[b.status] ?? 9) || recv(b) - recv(a) || b.id - a.id);
+
+  const body = $('#qbody');
+  if (body) body.innerHTML = filtered.map(queueRowHtml).join('')
+    || `<tr><td colspan="10" class="empty" style="padding:28px">No requisitions match.</td></tr>`;
+  const sub = $('#q-sub');
+  if (sub) sub.textContent = `${filtered.length} of ${rows.length} shown${qState.status ? ' · ' + PILL_LABEL[qState.status] : ''}`;
+  document.querySelectorAll('#q-pills .count-pill').forEach(p =>
+    p.classList.toggle('active', p.dataset.status === qState.status));
+}
+
+function queueTotal(r) {
+  if (r.extractionFailed || r.totalChf == null) return '<span style="color:#9ca3af">n/a</span>';
+  const sub = (r.currency && r.currency !== 'CHF' && r.statedTotal != null)
+    ? `<div style="font-size:11px;color:#9ca3af">${esc(r.currency)} ${chf(r.statedTotal)}</div>` : '';
+  return `<div>CHF ${chf(r.totalChf)}</div>${sub}`;
+}
+function queueChain(r) {
+  const steps = r.chain;
+  if (!steps || !steps.length) return '<span style="color:#9ca3af">—</span>';
+  return `<div class="chain-list">${steps.map((s,i) =>
+    `${i>0?'<span class="chain-arrow">→</span>':''}<span class="appr ${s.requiresAlternate?'appr-alt':'appr-pending'}" title="${esc((s.role||'').replace(/_/g,' '))}${s.requiresAlternate?' — requester = approver, alternate required':' — pending'}">${esc(s.name)}${s.requiresAlternate?' ⚠':''}</span>`
+  ).join('')}</div>`;
+}
 function queueRowHtml(r) {
+  const conf = (r.extractionFailed || r.minConfidence == null) ? '<span style="color:#9ca3af">n/a</span>' : confBar(r.minConfidence);
   return `<tr id="qrow-${r.id}" class="clickable" onclick="location.hash='#/detail/${r.id}'">
+    <td class="mono">#${r.id}</td>
+    <td style="white-space:nowrap">${r.receivedAt ? fmtDate(r.receivedAt) : 'n/a'}</td>
     <td>${esc(r.requester)}</td>
     <td>${r.supplier ? esc(r.supplier) : '<span class="chip chip-gray">unresolved</span>'}</td>
-    <td class="num">${r.totalChf != null ? cur(r.totalChf, r.currency) : '—'}</td>
-    <td>${chainHtml(r.chain, r.chainOk, null)}</td>
+    <td class="num">${queueTotal(r)}</td>
+    <td>${queueChain(r)}</td>
     <td>${statusBadge(r.status)}</td>
-    <td>${confBar(r.minConfidence)}</td>
-    <td class="mono">${r.poNumber ? esc(r.poNumber) : '—'}</td>
+    <td style="font-size:12px;color:#4b5563">${r.reason ? esc(r.reason) : '<span style="color:#9ca3af">—</span>'}</td>
+    <td>${conf}</td>
+    <td class="po-col mono">${r.poNumber ? esc(r.poNumber) : '—'}</td>
   </tr>`;
 }
 

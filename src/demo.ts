@@ -128,7 +128,8 @@ function safeParse<T>(json: string | null | undefined): T | null {
 
 interface RequisitionRow {
   id: number; status: string; subject: string | null;
-  sender_name: string | null; sender_email: string | null; created_at: string;
+  sender_name: string | null; sender_email: string | null;
+  received_at: string | null; created_at: string;
   extraction_json: string | null; resolution_json: string | null;
   draft_reply: string | null; email_path: string; message_id: string;
   po_number: string | null;
@@ -141,32 +142,97 @@ function minConfidence(extraction: any): number | null {
   return scores.length ? Math.min(...scores) : null;
 }
 
+// Sum of line items in the email's own currency (the "stated" amount, before FX).
+function statedTotal(extraction: any): number | null {
+  const items = extraction?.line_items;
+  if (!items || !items.length) return null;
+  let any = false, sum = 0;
+  for (const i of items) {
+    if (i.quantity == null || i.unit_price == null) continue;
+    any = true;
+    sum += i.price_basis === 'per_100' ? (i.quantity * i.unit_price) / 100 : i.quantity * i.unit_price;
+  }
+  return any ? sum : null;
+}
+
+// Short, plain-language label for a review reason code.
+const REASON_LABELS: Record<string, string> = {
+  security_flag:         'security block',
+  unknown_supplier:      'unknown supplier',
+  blocked_supplier:      'supplier blocked',
+  ambiguous_supplier:    'ambiguous supplier',
+  missing_cost_centre:   'cost centre not identified',
+  no_approval_chain:     'approval chain unresolved',
+  no_line_items:         'no line items extracted',
+  missing_delivery_date: 'missing delivery date',
+  low_confidence:        'low extraction confidence',
+  extraction_failed:     'extraction failed',
+  over_page_limit:       'attachment exceeds page limit',
+};
+const QUEUE_SEVERITY: Record<string, number> = { security: 0, human: 1, clarification: 2 };
+
+// One short reason for a non-submitted row. Prefers the most severe review item,
+// and uses the real approval-chain cause instead of a generic "chain failed".
+function primaryReason(status: string, items: any[], chain: any): string | null {
+  if (status === 'submitted') return null;
+  if (status === 'duplicate') return 'duplicate — reused existing PO';
+  if (status === 'failed' && items.length === 0) return 'processing failed';
+  if (items.length === 0) return null;
+
+  const sorted = [...items].sort((a, b) => (QUEUE_SEVERITY[a.queue] ?? 9) - (QUEUE_SEVERITY[b.queue] ?? 9));
+  const top = sorted[0];
+
+  let label: string;
+  if (top.code === 'no_approval_chain' && chain && chain.ok === false && chain.reason) {
+    label = chain.reason;                       // real cause (e.g. requester-is-approver)
+  } else {
+    label = REASON_LABELS[top.code] ?? top.code.replace(/_/g, ' ');
+  }
+  const extra = sorted.length - 1;
+  return extra > 0 ? `${label} (+${extra} more)` : label;
+}
+
 function queueRows() {
   const rows = db.prepare(`
-    SELECT r.id, r.status, r.subject, r.sender_name, r.sender_email, r.created_at,
-           r.extraction_json, r.resolution_json,
+    SELECT r.id, r.status, r.subject, r.sender_name, r.sender_email,
+           r.received_at, r.created_at, r.extraction_json, r.resolution_json,
            (SELECT po_number FROM po WHERE po.requisition_id = r.id) AS po_number
     FROM requisition r
     ORDER BY r.id DESC
   `).all() as RequisitionRow[];
 
+  // Fetch all review items once, grouped by requisition.
+  const reviews = db.prepare(`SELECT requisition_id, code, queue, detail FROM review_item`).all() as any[];
+  const byReq = new Map<number, any[]>();
+  for (const rv of reviews) {
+    if (!byReq.has(rv.requisition_id)) byReq.set(rv.requisition_id, []);
+    byReq.get(rv.requisition_id)!.push(rv);
+  }
+
   return rows.map(r => {
     const ext = safeParse<any>(r.extraction_json);
     const sol = safeParse<any>(r.resolution_json);
-    const chain = sol?.chain?.ok ? sol.chain.chain : null;
+    const chainResult = sol?.chain ?? null;
+    // Show the chain whether it passed or failed (the failed case now carries the
+    // flagged steps, e.g. a requester-is-approver conflict).
+    const steps = chainResult?.chain ?? null;
     return {
-      id:            r.id,
-      status:        r.status,
-      subject:       r.subject,
-      requester:     r.sender_name ?? r.sender_email ?? ext?.requester_name ?? '—',
-      supplier:      sol?.supplier?.match?.name ?? ext?.supplier_name ?? null,
-      totalChf:      typeof sol?.computedTotalChf === 'number' ? sol.computedTotalChf : null,
-      currency:      sol?.currency ?? ext?.currency ?? null,
-      chain:         chain ? chain.map((s: any) => ({ name: s.name, role: s.role })) : null,
-      chainOk:       sol?.chain?.ok ?? null,
-      minConfidence: minConfidence(ext),
-      poNumber:      r.po_number,
-      createdAt:     r.created_at,
+      id:              r.id,
+      status:          r.status,
+      subject:         r.subject,
+      requester:       r.sender_name ?? r.sender_email ?? ext?.requester_name ?? '—',
+      supplier:        sol?.supplier?.match?.name ?? ext?.supplier_name ?? null,
+      totalChf:        typeof sol?.computedTotalChf === 'number' ? sol.computedTotalChf : null,
+      statedTotal:     statedTotal(ext),
+      currency:        sol?.currency ?? ext?.currency ?? null,
+      chain:           steps ? steps.map((s: any) => ({ name: s.name, role: s.role, requiresAlternate: !!s.requiresAlternate })) : null,
+      chainOk:         chainResult?.ok ?? null,
+      minConfidence:   minConfidence(ext),
+      reason:          primaryReason(r.status, byReq.get(r.id) ?? [], chainResult),
+      extractionFailed: !ext,
+      poNumber:        r.po_number,
+      receivedAt:      r.received_at,
+      createdAt:       r.created_at,
     };
   });
 }

@@ -90,55 +90,79 @@ describe('duplicate collapse (CC-DUAL: same person is owner and dept head)', () 
   });
 });
 
-// ── Self-approval handling ────────────────────────────────────────────────────
+// ── Self-approval handling (A6 / D27) ────────────────────────────────────────
+// New rule: if the requester is one of the required approvers, the chain fails
+// (needs_human_review) and the conflicting step is KEPT and flagged
+// requiresAlternate, so a human can assign a stand-in. This holds regardless of
+// whether a more senior approver could otherwise "cover" the band.
 
 describe('self-approval (requester is in the chain)', () => {
-  // Band 1: only the cc_owner is required. Requester IS cc_owner. Chain empties → review.
-  it('T33 — requester=cc_owner, band 1 → needs_human_review (chain empty)', () => {
+  // Band 1: only the cc_owner is required and the requester IS the cc_owner.
+  it('T33 — requester=cc_owner, band 1 → fails, step kept + flagged', () => {
     const r = chain('CC-A', 'EMP-A1', 500);
     expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.chain?.map(s => s.employeeId)).toEqual(['EMP-A1']);
+      expect(r.chain?.[0].requiresAlternate).toBe(true);
+      expect(r.reason).toMatch(/alternate/i);
+    }
   });
 
-  // Band 2: [cc_owner, dept_head]. Remove cc_owner (requester). Remaining=[dept_head].
-  // dept_head level 2 >= required max 2 → valid.
-  it('T34 — requester=cc_owner, band 2 → [dept_head] (covered)', () => {
+  // Band 2: [cc_owner, dept_head], requester is the cc_owner. Previously this
+  // passed (dept_head "covered"); now it fails with the cc_owner step flagged.
+  it('T34 — requester=cc_owner, band 2 → fails, cc_owner kept + flagged', () => {
     const r = chain('CC-A', 'EMP-A1', 5000);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.chain.map(s => s.employeeId)).toEqual(['EMP-A2']);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.chain?.map(s => s.employeeId)).toEqual(['EMP-A1', 'EMP-A2']);
+      expect(r.chain?.find(s => s.employeeId === 'EMP-A1')?.requiresAlternate).toBe(true);
+      expect(r.chain?.find(s => s.employeeId === 'EMP-A2')?.requiresAlternate).toBeUndefined();
+    }
   });
 
-  // Band 2: [cc_owner, dept_head]. Remove dept_head (requester). Remaining=[cc_owner].
-  // cc_owner level 1 < required max 2 (dept_head) → nobody covers dept_head → review.
-  it('T35 — requester=dept_head, band 2 → needs_human_review (cc_owner cannot cover dept_head)', () => {
+  // Band 2: requester is the dept_head. Fails with the dept_head step flagged.
+  it('T35 — requester=dept_head, band 2 → fails, dept_head kept + flagged', () => {
     const r = chain('CC-A', 'EMP-A2', 5000);
     expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.chain?.map(s => s.employeeId)).toEqual(['EMP-A1', 'EMP-A2']);
+      expect(r.chain?.find(s => s.employeeId === 'EMP-A2')?.requiresAlternate).toBe(true);
+    }
   });
 
-  // Band 3: [cc_owner, dept_head, finance]. Remove dept_head (requester).
-  // Remaining=[cc_owner, finance]. finance level 3 >= required max 3 → valid.
-  it('T36 — requester=dept_head, band 3 → [cc_owner, finance] (finance covers)', () => {
+  // Band 3: [cc_owner, dept_head, finance], requester is the dept_head.
+  // Previously passed ([cc_owner, finance]); now fails with dept_head flagged.
+  it('T36 — requester=dept_head, band 3 → fails, dept_head kept + flagged', () => {
     const r = chain('CC-A', 'EMP-A2', 25000);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.chain.map(s => s.employeeId)).toEqual(['EMP-A1', 'EMP-FIN']);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.chain?.map(s => s.employeeId)).toEqual(['EMP-A1', 'EMP-A2', 'EMP-FIN']);
+      expect(r.chain?.find(s => s.employeeId === 'EMP-A2')?.requiresAlternate).toBe(true);
+    }
   });
 
-  // Band 4: [cc_owner, dept_head, finance, cfo]. Remove cfo (requester).
-  // Remaining=[cc_owner, dept_head, finance]. finance level 3 < required max 4 → review.
-  it('T37 — requester=cfo, band 4 → needs_human_review (finance cannot cover cfo)', () => {
+  // Band 4: requester is the cfo.
+  it('T37 — requester=cfo, band 4 → fails, cfo kept + flagged', () => {
     const r = chain('CC-A', 'EMP-CFO', 100000);
     expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.chain?.find(s => s.employeeId === 'EMP-CFO')?.requiresAlternate).toBe(true);
   });
 
-  // Band 5: ceo must approve. Remove ceo (requester). Remaining max=4 (cfo) < 5 → review.
-  it('T38 — requester=ceo, band 5 → needs_human_review (nobody above CEO)', () => {
+  // Band 5: requester is the ceo.
+  it('T38 — requester=ceo, band 5 → fails, ceo kept + flagged', () => {
     const r = chain('CC-A', 'EMP-CEO', 300000);
     expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.chain?.find(s => s.employeeId === 'EMP-CEO')?.requiresAlternate).toBe(true);
   });
 
-  // CC-DUAL after collapse chain=[EMP-DUAL]. Remove EMP-DUAL (requester). Empty → review.
-  it('T39 — requester=EMP-DUAL on CC-DUAL, band 2 → needs_human_review (collapsed then emptied)', () => {
+  // CC-DUAL collapses to [EMP-DUAL]; requester is EMP-DUAL → fails, single flagged step.
+  it('T39 — requester=EMP-DUAL on CC-DUAL, band 2 → fails, collapsed step flagged', () => {
     const r = chain('CC-DUAL', 'EMP-DUAL', 5000);
     expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.chain?.map(s => s.employeeId)).toEqual(['EMP-DUAL']);
+      expect(r.chain?.[0].requiresAlternate).toBe(true);
+    }
   });
 });
 
