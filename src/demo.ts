@@ -517,6 +517,18 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    // Resets a rejected requisition back to waiting_approval when the clerk
+    // changes an approver's status away from rejected (demo use).
+    const unrejectMatch = path.match(/^\/api\/requisition\/(\d+)\/unreject$/);
+    if (method === 'POST' && unrejectMatch) {
+      const id = parseInt(unrejectMatch[1], 10);
+      const row = db.prepare(`SELECT id FROM requisition WHERE id = ?`).get(id);
+      if (!row) { sendJson(res, 404, { error: 'not found' }); return; }
+      db.prepare(`UPDATE requisition SET status = 'waiting_approval', updated_at = datetime('now') WHERE id = ?`).run(id);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     // Reverts a waiting_approval requisition back to needs_human_review so the
     // clerk can edit the form and fix data errors caught at submission time.
     const reopenMatch = path.match(/^\/api\/requisition\/(\d+)\/reopen$/);

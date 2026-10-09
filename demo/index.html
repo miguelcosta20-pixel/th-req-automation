@@ -1096,7 +1096,10 @@ function detailHeader(status, d, ext, sol) {
       <div style="font-size:13px;color:#166534;font-weight:600">✓ All approvers approved</div>`;
   } else if (isRejected) {
     rightHtml = `${totalBlock}
-      <div style="font-size:13px;color:#991b1b;font-weight:600">✗ Rejected by an approver</div>`;
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+        <div style="font-size:13px;color:#991b1b;font-weight:600">✗ Rejected by an approver</div>
+        <button class="ghost" style="font-size:12px;height:28px;padding:0 12px" onclick="resetToWaiting()">Reset to waiting for approval</button>
+      </div>`;
   } else {
     const clarifyBtn = isNeedsReview
       ? `<button class="ghost" onclick="requestClarification()">Request clarification</button>`
@@ -1561,11 +1564,28 @@ async function cycleApproverStatus(idx, isAlt = false) {
   } else if (allApproved) {
     reRenderDetail('approved');  // already submitted, just keep the state
   } else {
+    // No approvers are rejected — reset DB status to waiting_approval so a
+    // refresh doesn't snap back to rejected (demo use).
+    fetch(`/api/requisition/${d.id}/unreject`, { method: 'POST' })
+      .catch(err => console.warn('unreject persist failed:', err));
     reRenderDetail('waiting_approval');
   }
 }
 
 // ── Alternate approver management ─────────────────────────────────────────────
+
+// Resets a rejected requisition back to waiting_approval, clearing all
+// per-approver states so the demo can re-run the approval cycle cleanly.
+async function resetToWaiting() {
+  const d = window._detail;
+  if (!d) return;
+  _approvalStates = {};
+  _poSubmitted = false;
+  await fetch(`/api/requisition/${d.id}/unreject`, { method: 'POST' })
+    .catch(err => console.warn('unreject failed:', err));
+  persistApprovalState();
+  reRenderDetail('waiting_approval');
+}
 
 // Fire-and-forget: saves _approvalStates + _alternateApprovers to DB so they
 // survive navigation and refresh. Called after every state change.
