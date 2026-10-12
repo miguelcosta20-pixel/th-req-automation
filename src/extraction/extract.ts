@@ -37,13 +37,56 @@ export async function extractFromEmail(
   client: LlmClient,
   systemPrompt: string,
   model: string,
-  isCorrection = false,
 ): Promise<ExtractResult> {
   const firstUserContent: ContentBlock[] = [
-    { type: 'text', text: formatEmailText(email, isCorrection) },
+    { type: 'text', text: formatEmailText(email) },
     ...documentBlocks,
   ];
 
+  return extractWithRetry(firstUserContent, client, systemPrompt, model);
+}
+
+// Merges a correction email onto the ORIGINAL requisition's already-extracted
+// structured data (not the original's raw email). Using the stored extraction
+// means line items that originally came from a PDF, or from an earlier
+// correction in a chain, are preserved — re-reading the original email body
+// would lose them. The correction's own attachments are still sent, in case the
+// correction introduces new document-based line items. Same retry contract as
+// extractFromEmail. The caller always routes the result to review.
+export async function mergeCorrection(
+  originalExtraction: Extraction,
+  correctionEmail:    ParsedEmail,
+  correctionBlocks:   DocumentBlock[],
+  client:             LlmClient,
+  systemPrompt:       string,
+  model:              string,
+): Promise<ExtractResult> {
+  const mergeText =
+    'MERGE TASK: Apply the CORRECTION to the ORIGINAL requisition and return ONE\n' +
+    'final extraction covering the full schema. The ORIGINAL is given as\n' +
+    'already-extracted structured JSON. Keep every ORIGINAL value unless the\n' +
+    'correction explicitly changes or removes it.\n\n' +
+    '===== ORIGINAL (structured JSON) =====\n' +
+    JSON.stringify(originalExtraction, null, 2) +
+    '\n\n===== CORRECTION (email) =====\n' +
+    formatEmailText(correctionEmail);
+
+  const firstUserContent: ContentBlock[] = [
+    { type: 'text', text: mergeText },
+    ...correctionBlocks,
+  ];
+
+  return extractWithRetry(firstUserContent, client, systemPrompt, model);
+}
+
+// Shared call+retry machinery. First attempt; on invalid JSON / Zod failure,
+// retry once showing the model its own output and the validation error.
+async function extractWithRetry(
+  firstUserContent: ContentBlock[],
+  client:           LlmClient,
+  systemPrompt:     string,
+  model:            string,
+): Promise<ExtractResult> {
   const req1: LlmRequest = {
     model,
     system: systemPrompt,
@@ -144,20 +187,16 @@ function parseExtraction(text: string): { extraction: Extraction | null; parseEr
   }
 }
 
-function formatEmailText(email: ParsedEmail, isCorrection = false): string {
+function formatEmailText(email: ParsedEmail): string {
   const from = [email.from.name, email.from.address ? `<${email.from.address}>` : '']
     .filter(Boolean).join(' ');
   const body = email.textBody.trim() || '(empty email body)';
-
-  const correctionNote = isCorrection
-    ? 'NOTE: This email is a correction to a previous request. Extract only the final intended values.\n\n'
-    : '';
 
   return [
     `From: ${from || 'unknown'}`,
     `Subject: ${email.subject}`,
     `Date: ${email.receivedAt.toISOString()}`,
     '',
-    correctionNote + body,
+    body,
   ].join('\n');
 }

@@ -2,7 +2,7 @@
   "email_file": "data/emails/email_44.eml",
   "description": "Clarification — datasheet attached, no price, no delivery date",
   "expected": {
-    "status": "needs_clarification",
+    "status": "needs_human_review",
     "supplier_id": "SUP-015",
     "cost_centre_code": "CC-2002",
     "currency": null,
@@ -12,5 +12,5 @@
     "approval_chain_ids": null
   },
   "verify_after_run": false,
-  "notes": "Anna Widmer attaches a Sensorik Nord datasheet, requests 20 pcs with no quote or price. Supplier=SUP-015 (Sensorik Nord GmbH, active). CC-2002 explicitly stated. No price → LLM extracts item description+qty but unit_price=null → missing_delivery_date + no_line_items or low_confidence_line_items → needs_clarification."
+  "notes": "Anna Widmer attaches a Sensorik Nord datasheet, requests 20 pcs with no quote or price. Supplier=SUP-015 (Sensorik Nord GmbH, active). CC-2002 explicitly stated. No price → LLM extracts item description+qty but unit_price=null → missing_delivery_date + no_line_items or low_confidence_line_items → needs_human_review."
 }

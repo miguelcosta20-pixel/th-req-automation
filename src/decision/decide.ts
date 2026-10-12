@@ -120,13 +120,8 @@ export function decide(
     return { status: 'ready', reasons: [] };
   }
 
-  // Any human-queue reason escalates the whole requisition to human review.
-  if (reasons.some(r => r.queue === 'human')) {
-    return { status: 'needs_human_review', reasons };
-  }
-
   return {
-    status:     'needs_clarification',
+    status:     'needs_human_review',
     reasons,
     draftReply: buildDraftReply(extraction, reasons),
   };
@@ -145,6 +140,11 @@ function buildDraftReply(extraction: Extraction, reasons: ReviewReason[]): strin
       case 'missing_cost_centre':   return '• Cost centre (e.g. CC-1001 — Plant Maintenance)';
       case 'no_line_items':         return '• Line item details: description, quantity, and unit price';
       case 'low_confidence':        return '• Please clarify any ambiguous fields in your request';
+      case 'unknown_supplier':      return `• Supplier name — we could not find "${supplier}" in our system. Please confirm the full legal name or supplier number`;
+      case 'blocked_supplier':      return `• Supplier — "${supplier}" is currently blocked in our purchasing system. Please suggest an alternative supplier`;
+      case 'ambiguous_supplier':    return `• Supplier name — "${supplier}" matches multiple entries. Please clarify which supplier you intended`;
+      case 'no_approval_chain':     return '• Approval routing — we could not determine the correct approval chain. Please confirm the cost centre for this purchase';
+      case 'negative_total':        return '• Order total — the amounts in your request result in a negative total. Please check the quantities and unit prices';
       default:                      return `• ${r.detail}`;
     }
   }).join('\n');

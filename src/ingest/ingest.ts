@@ -5,7 +5,11 @@ import type { ParsedEmail, ParsedAttachment } from '../types';
 export async function ingestEml(raw: string | Buffer): Promise<ParsedEmail> {
   const parsed = await simpleParser(raw, { skipTextToHtml: false });
 
-  const messageId = parsed.messageId ?? generateMessageId(raw);
+  // Strip angle brackets so message-id comparisons are consistent. mailparser
+  // returns Message-ID as <id@host> but In-Reply-To normalised differently;
+  // we normalise both the same way so idempotency and thread-based correction
+  // lookups (requisition.message_id = inReplyTo) actually match.
+  const messageId = (parsed.messageId ?? generateMessageId(raw)).replace(/^<|>$/g, '');
 
   const attachments: ParsedAttachment[] = (parsed.attachments ?? []).map(att => ({
     filename: att.filename ?? 'attachment',
@@ -16,8 +20,7 @@ export async function ingestEml(raw: string | Buffer): Promise<ParsedEmail> {
 
   return {
     messageId,
-    // Strip angle brackets — mailparser may return <id@host> for In-Reply-To
-    // but stores messageId without them; normalise so DB lookups match.
+    // In-Reply-To may also arrive as <id@host>; strip to match messageId above.
     inReplyTo: parsed.inReplyTo ? parsed.inReplyTo.replace(/^<|>$/g, '') : null,
     from: {
       name:    parsed.from?.value?.[0]?.name,

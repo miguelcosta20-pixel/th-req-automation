@@ -71,6 +71,9 @@ export function initDb(path: string): Database.Database {
   if (!reqCols.has('approval_state_json')) {
     db.exec("ALTER TABLE requisition ADD COLUMN approval_state_json TEXT");
   }
+  if (!reqCols.has('supersedes_requisition_id')) {
+    db.exec("ALTER TABLE requisition ADD COLUMN supersedes_requisition_id INTEGER");
+  }
 
   return db;
 }

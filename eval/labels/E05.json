@@ -2,7 +2,7 @@
   "email_file": "data/emails/email_02_inline_request.eml",
   "description": "Clarification — supplier known, no price, no delivery date, vague cost centre",
   "expected": {
-    "status": "needs_clarification",
+    "status": "needs_human_review",
     "supplier_id": "SUP-005",
     "cost_centre_code": null,
     "currency": null,

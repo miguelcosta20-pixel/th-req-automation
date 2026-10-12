@@ -35,20 +35,20 @@ python3 tools/mock_po_api.py
 Process a single email:
 
 ```bash
-tsx src/cli.ts run data/emails/sample.eml
+npm run cli -- run data/emails/email_01_clean_with_pdf.eml
 ```
 
 Process all emails in a directory:
 
 ```bash
-tsx src/cli.ts run-all data/emails
+npm run cli -- run-all
 ```
 
 Check the status of a processed email:
 
 ```bash
-tsx src/cli.ts status                        # last 20 requisitions
-tsx src/cli.ts status data/emails/sample.eml # one specific email
+npm run cli -- status                        # last 20 requisitions
+npm run cli -- status data/emails/sample.eml # one specific email
 ```
 
 ## Demo UI
@@ -102,7 +102,7 @@ Customer config lives in `config/toastwerk/config.json`. A second customer is a 
 2. **Extract** — send email text + PDF document blocks to the LLM; validate response against a Zod schema; retry once with the validation error on failure
 3. **Resolve** — fuzzy-match supplier, cost centre, employee, GL account against master data; compute CHF total using master-data FX rates
 4. **Approve** — deterministic approval chain from the CHF total and cost-centre department
-5. **Decide** — route to `submitted`, `needs_clarification`, `needs_human_review`, or `security`
+5. **Decide** — route to `ready`, `needs_human_review`, or `security`. Clarification-type issues (missing delivery date, cost centre, etc.) and human-review issues both map to `needs_human_review` — the difference is whether a pre-drafted reply to the requester is generated
 6. **Submit** — POST to the mock PO API; record everything in the SQLite audit log
 
 ## src layout
@@ -138,4 +138,5 @@ These are documented in full in [docs/decisions.md](docs/decisions.md). Short ve
 | A9 | PO approval: unanimous — all reviewers must approve; one rejection blocks the PO (A9) |
 | A10 | Blocked supplier: flags the requisition as security risk but does not prevent the clerk from submitting for approval (A10) |
 | A11 | Cost centre is mandatory: without a resolved cost centre the approval chain cannot be determined. The clerk form enforces this — the submit button stays disabled until a valid cost centre is selected from the master-data list. |
-| A13 | Thread-aware corrections: if a correction email's `In-Reply-To` header matches an existing unsubmitted requisition, the pipeline overwrites that row in place and re-runs all stages. If the original PO was already submitted, the correction is treated as a new independent requisition — recalling a submitted PO is out of scope |
+| A13 | Thread-aware corrections (header path): `In-Reply-To` matches an unsubmitted requisition → overwrite that row in place and re-run all stages (quantity change can move the approval band). `In-Reply-To` matches an already-submitted PO → new row flagged `amendment_after_po` for the clerk. No `In-Reply-To` → falls through to A14. |
+| A14 | Body-based correction detection (LLM path): if the LLM sets `is_correction: true` and no `In-Reply-To` header was detected, the pipeline queries for the most recent unsubmitted requisition from the same sender within 7 days. Found with PO → `amendment_after_po`. Found without PO → `amendment_replaces` (clerk confirms before merging). Not found → `correction_target_not_found` note, processing continues. All body-based cases route to `needs_human_review` with a pre-drafted reply. |

@@ -30,6 +30,8 @@ Return ONLY a valid JSON object matching this exact schema:
 ],
 "notes": "string or null — delivery instructions, payment terms, urgency signals, or other free-text remarks from the requester",
 "instructions_to_reader": "string or null",
+"is_correction": false,
+"amends_description": "string or null",
 "field_confidence": {
 "requester_name": 0.0,
 "requester_email": 0.0,
@@ -99,3 +101,5 @@ Rules:
 9. If the email provides both an explicit delivery date and a relative deadline, check whether they are consistent. If they conflict, do not silently choose one; leave "explicit_date" null and explain the conflict in "reasoning".
 
 10. Return valid JSON only. Use the exact schema and allowed enum values. Do not add extra fields, comments, trailing commas, or explanatory text outside the JSON object.
+
+11. is_correction / amends_description: set "is_correction" to true only when this email explicitly corrects, amends, or cancels a previous purchase request. Signals: "please disregard my last email / mail", "ignoriere bitte mein letztes Mail", "Korrektur zu meiner letzten Anfrage", "the quantity should be X not Y", "I made an error in my previous request", "instead of X please order Y", "not X but Y". Do NOT set true for forwards, resends with a missing attachment, or repeat orders referencing a prior PO for re-use. When is_correction is true, set "amends_description" to one sentence describing what changes (e.g. "Quantity correction: 12 m not 120 m of cable carrier CK-25-A; all other details unchanged."). When is_correction is false, set "amends_description" to null.

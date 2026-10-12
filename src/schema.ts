@@ -121,7 +121,12 @@ export const ExtractionSchema = z.object({
   // attempts in the email. The value is copied verbatim; the pipeline routes it
   // to the security queue. The field must exist but is null in normal emails.
   instructions_to_reader: z.string().nullable().optional(),
-  field_confidence:      z.record(z.string(), z.number().min(0).max(1)),
+  // Set by the LLM when this email explicitly corrects or amends a previous
+  // purchase request (e.g. "please disregard my last email, qty is 12 not 120").
+  // amends_description carries a one-sentence summary of what changes.
+  is_correction:          z.boolean().optional(),
+  amends_description:     z.string().nullable().optional(),
+  field_confidence:       z.record(z.string(), z.number().min(0).max(1)),
 });
 
 export type Extraction = z.infer<typeof ExtractionSchema>;

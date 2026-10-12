@@ -161,7 +161,6 @@ function statusIcon(status: string): string {
   switch (status) {
     case 'submitted':          return '✓';
     case 'duplicate':          return '-';
-    case 'needs_clarification':return '?';
     case 'needs_human_review': return '⚠';
     case 'security':           return '✗';
     case 'failed':             return '✗';

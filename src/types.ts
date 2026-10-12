@@ -54,14 +54,14 @@ export interface ReviewReason {
 
 // Final outcome of decide().
 export interface Decision {
-  status: 'ready' | 'needs_clarification' | 'needs_human_review' | 'security';
+  status: 'ready' | 'needs_human_review' | 'security';
   reasons: ReviewReason[];
   draftReply?: string;
 }
 
 // What the pipeline returns for each email.
 export interface ProcessResult {
-  status: 'waiting_approval' | 'needs_clarification' | 'needs_human_review' | 'security' | 'duplicate' | 'failed';
+  status: 'waiting_approval' | 'needs_human_review' | 'security' | 'duplicate' | 'failed';
   emailPath: string;
   messageId?: string;
   poNumber?: string;
