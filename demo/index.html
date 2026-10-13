@@ -50,7 +50,6 @@ select { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 10px; font-
 .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 20px; font-weight: 700; font-size: 12px; letter-spacing: .02em; white-space: nowrap; }
 .status-submitted           { background: #dcfce7; color: #166534; }
 .status-ready               { background: #dcfce7; color: #166534; }
-.status-needs_clarification { background: #ffedd5; color: #9a3412; }
 .status-needs_human_review  { background: #ffedd5; color: #9a3412; }
 .status-security            { background: #fee2e2; color: #991b1b; }
 .status-failed              { background: #f3f4f6; color: #4b5563; }
@@ -60,6 +59,7 @@ select { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 10px; font-
 .status-ready_to_submit     { background: #dcfce7; color: #166534; }
 .status-rejected            { background: #fee2e2; color: #991b1b; }
 .status-approved            { background: #dcfce7; color: #166534; }
+.status-superseded          { background: #e5e7eb; color: #6b7280; }
 
 /* ── Chips ──────────────────────────────────────────────────────── */
 .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
@@ -123,7 +123,6 @@ mark.flagged { background: #fecaca; color: #7f1d1d; padding: 0 2px; border-radiu
 /* ── Summary card ───────────────────────────────────────────────── */
 .summary { border-left: 4px solid #6366f1; }
 .summary.sev-submitted, .summary.sev-duplicate { border-left-color: #22c55e; }
-.summary.sev-needs_clarification { border-left-color: #f97316; }
 .summary.sev-needs_human_review { border-left-color: #f97316; }
 .summary.sev-security, .summary.sev-failed { border-left-color: #ef4444; }
 .summary-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
@@ -336,7 +335,7 @@ a.back:hover { text-decoration: underline; }
       <p id="confirm-message" style="font-size:14px;color:#374151;margin-bottom:20px;line-height:1.5"></p>
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button class="ghost" onclick="closeConfirmModal()">Cancel</button>
-        <button style="background:#6366f1;color:#fff;border:none;border-radius:5px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit" onclick="confirmModalYes()">Submit anyway</button>
+        <button id="confirm-yes-btn" style="background:#6366f1;color:#fff;border:none;border-radius:5px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit" onclick="confirmModalYes()">Submit anyway</button>
       </div>
     </div>
   </div>
@@ -355,15 +354,15 @@ function statusBadge(s) {
   // Backward compat: existing DB rows may still have 'submitted' — display as Approved.
   const display = s === 'submitted' ? 'approved' : s;
   const LABEL = {
-    needs_clarification: 'Needs Review',
     needs_human_review: 'Needs Review',
     security: 'Security Risk',
     failed: 'Failed', duplicate: 'Duplicate', processing: 'Processing',
     waiting_approval: 'Waiting for Approval',
     rejected: 'Rejected',
     approved: 'Approved',
+    superseded: 'Superseded',
   };
-  const ICON = { needs_clarification:'⚑', needs_human_review:'⚑', security:'⛔', failed:'✗', duplicate:'⊙', processing:'…', waiting_approval:'⏳', rejected:'✗', approved:'✓' };
+  const ICON = { needs_human_review:'⚑', security:'⛔', failed:'✗', duplicate:'⊙', processing:'…', waiting_approval:'⏳', rejected:'✗', approved:'✓', superseded:'⤼' };
   return `<span class="status-badge status-${esc(display)}">${ICON[display] ?? '?'} ${esc(LABEL[display] ?? String(display).replace(/_/g,' '))}</span>`;
 }
 function confBar(c) {
@@ -429,17 +428,15 @@ let justAddedId = null;   // highlights the row for a freshly processed email
 const qState = { status: '', search: '', sort: 'priority' };
 
 // Default sort order: most-urgent statuses first.
-const STATUS_PRIORITY = { security: 0, needs_human_review: 1, needs_clarification: 1, waiting_approval: 2, rejected: 3, approved: 4, duplicate: 5, failed: 6, processing: 7 };
-const STATUS_DOT = { security: '#ef4444', needs_human_review: '#f97316', needs_clarification: '#f97316', submitted: '#22c55e', approved: '#22c55e', rejected: '#ef4444', waiting_approval: '#eab308', duplicate: '#8b5cf6', failed: '#9ca3af', processing: '#38bdf8' };
-const PILL_ORDER = ['security', 'needs_human_review', 'waiting_approval', 'rejected', 'approved', 'duplicate', 'failed'];
-const PILL_LABEL = { security: 'security risk', needs_human_review: 'needs review', needs_clarification: 'needs review', submitted: 'approved', duplicate: 'duplicate', failed: 'failed', approved: 'approved', rejected: 'rejected', waiting_approval: 'waiting for approval' };
+const STATUS_PRIORITY = { security: 0, needs_human_review: 1, waiting_approval: 2, rejected: 3, approved: 4, duplicate: 5, superseded: 6, failed: 7, processing: 8 };
+const STATUS_DOT = { security: '#ef4444', needs_human_review: '#f97316', submitted: '#22c55e', approved: '#22c55e', rejected: '#ef4444', waiting_approval: '#eab308', duplicate: '#8b5cf6', superseded: '#9ca3af', failed: '#9ca3af', processing: '#38bdf8' };
+const PILL_ORDER = ['security', 'needs_human_review', 'waiting_approval', 'rejected', 'approved', 'duplicate', 'superseded', 'failed'];
+const PILL_LABEL = { security: 'security risk', needs_human_review: 'needs review', submitted: 'approved', duplicate: 'duplicate', failed: 'failed', approved: 'approved', rejected: 'rejected', waiting_approval: 'waiting for approval', superseded: 'superseded' };
 
 async function renderQueue() {
   const rows = await fetchJson('/api/queue');
   window._queue = rows;
   const counts = {}; rows.forEach(r => counts[r.status] = (counts[r.status] || 0) + 1);
-  // Merge needs_clarification into the single "needs review" pill so we don't show two identical pills.
-  counts['needs_human_review'] = (counts['needs_human_review'] || 0) + (counts['needs_clarification'] || 0);
   const pills = PILL_ORDER.filter(s => counts[s]).map(s =>
     `<div class="count-pill" data-status="${s}"><span class="cdot" style="background:${STATUS_DOT[s]}"></span>${PILL_LABEL[s]} <span class="n">${counts[s]}</span></div>`).join('');
 
@@ -485,10 +482,7 @@ function applyRows() {
   const rows = window._queue || [];
   const q = qState.search.trim().toLowerCase();
   let filtered = rows.filter(r =>
-    (!qState.status ||
-      r.status === qState.status ||
-      // "needs review" pill covers both review statuses
-      (qState.status === 'needs_human_review' && r.status === 'needs_clarification')) &&
+    (!qState.status || r.status === qState.status) &&
     (!q || (r.requester || '').toLowerCase().includes(q) || (r.supplier || '').toLowerCase().includes(q)));
 
   const recv = r => new Date(r.receivedAt || r.createdAt || 0).getTime();
@@ -513,7 +507,7 @@ function queueTotal(r) {
 }
 function queueChain(r) {
   // Hide approval chain for statuses before the clerk submits for approval
-  if (['needs_human_review','needs_clarification','security'].includes(r.status)) return '<span style="color:#9ca3af">—</span>';
+  if (['needs_human_review','security'].includes(r.status)) return '<span style="color:#9ca3af">—</span>';
   const steps = r.chain;
   if (!steps || !steps.length) return '<span style="color:#9ca3af">—</span>';
   return `<div class="chain-list">${steps.map((s,i) => {
@@ -531,7 +525,11 @@ function queueRowHtml(r) {
     <td>${r.supplier ? esc(r.supplier) : '<span class="chip chip-gray">unresolved</span>'}</td>
     <td class="num">${queueTotal(r)}</td>
     <td>${queueChain(r)}</td>
-    <td>${statusBadge(r.status)}</td>
+    <td>${statusBadge(r.status)}${
+      r.supersedesId ? `<div style="font-size:10px;color:#6b7280;margin-top:2px">↩ corrects #${r.supersedesId}</div>` : ''
+    }${
+      r.supersededById ? `<div style="font-size:10px;color:#6b7280;margin-top:2px">⤼ superseded by #${r.supersededById}</div>` : ''
+    }</td>
     <td style="font-size:12px;color:#4b5563">${r.reason ? esc(r.reason) : '<span style="color:#9ca3af">—</span>'}</td>
     <td>${conf}</td>
     <td class="po-col mono">${r.poNumber ? esc(r.poNumber) : '—'}</td>
@@ -575,7 +573,6 @@ function statusHeadline(s) {
     approved:            'Approved — purchase order raised',
     submitted:           'Approved — purchase order raised',  // backward compat
     duplicate:           'Duplicate — existing PO reused',
-    needs_clarification: 'Needs review',
     needs_human_review:  'Needs review',
     security:            'Security risk — blocked for review',
     failed:              'Processing failed',
@@ -589,7 +586,6 @@ function plainReason(d) {
     case 'approved':
     case 'submitted':   return { reason: 'All approvers have approved the requisition and a purchase order has been raised.', action: 'No further action needed — see the PO number below.' };
     case 'duplicate':  return { reason: 'This email was processed before; the existing purchase order was reused rather than creating a second one.', action: 'No action needed — see the existing PO.' };
-    case 'needs_clarification': return { reason: 'Required information is missing or unclear, so the requisition was held rather than guessed.' + (details.length ? ' Missing: ' + esc(details.join('; ')) + '.' : ''), action: 'Send the drafted reply to the requester.' };
     case 'needs_human_review':  return { reason: 'A rule needs a person to decide.' + (details.length ? ' Flags: ' + esc(details.join('; ')) + '.' : ''), action: 'Review the flags, then approve or reject.' };
     case 'security':   return { reason: 'The email contained an instruction aimed at the processor. Email content is untrusted, so it was quarantined and ignored; no purchase order was created.', action: 'Investigate the sender; do not process automatically.' };
     case 'failed':     return { reason: 'Processing could not complete' + (d.error ? ': ' + esc(d.error) : '.'), action: 'Inspect the error and retry.' };
@@ -649,6 +645,72 @@ function doAction(kind) {
   } else if (kind === 'reject') {
     note.innerHTML = `<span class="chip chip-red">prototype</span> Would mark this requisition rejected (not persisted).`;
   }
+}
+
+function dismissReview() {
+  const d = window._detail;
+  if (!d) return;
+  fetch(`/api/requisition/${d.id}/reject`, { method: 'POST' })
+    .then(r => {
+      if (r.ok) { location.hash = '#/queue'; }
+    })
+    .catch(() => {});
+}
+
+async function reopenReview() {
+  const d = window._detail;
+  if (!d) return;
+  await fetch(`/api/requisition/${d.id}/reopen`, { method: 'POST' }).catch(() => {});
+  const fresh = await fetchJson('/api/requisition/' + d.id);
+  window._detail = fresh;
+  _detailStatus = null;
+  renderDetailView(fresh);
+}
+
+async function reloadDetail(id) {
+  const fresh = await fetchJson('/api/requisition/' + id);
+  window._detail = fresh;
+  _detailStatus = null;
+  renderDetailView(fresh);
+}
+
+// Correction resolution (clerk decides; nothing is auto-parked).
+// supersedeOriginal: park the original behind this correction so only the
+// correction can become a PO. discardCorrection: reject this correction and
+// leave the original active. restoreOriginal: undo a supersede.
+async function supersedeOriginal(correctionId) {
+  openConfirmModal(
+    'Supersede the original order?',
+    'This parks the original requisition so it can no longer become a separate PO. This correction stays and can be approved as the single order.',
+    async () => {
+      try {
+        await fetchJson(`/api/requisition/${correctionId}/supersede-original`, { method: 'POST' });
+        await reloadDetail(correctionId);
+      } catch (err) { console.warn('supersede failed:', err); }
+    },
+    'Supersede original',
+  );
+}
+
+async function discardCorrection(correctionId) {
+  openConfirmModal(
+    'Discard this correction?',
+    'This rejects the correction and leaves the original order active and approvable. Use this if the correction was matched to the wrong order or is not wanted.',
+    async () => {
+      try {
+        await fetchJson(`/api/requisition/${correctionId}/reject`, { method: 'POST' });
+        await reloadDetail(correctionId);
+      } catch (err) { console.warn('discard failed:', err); }
+    },
+    'Discard correction',
+  );
+}
+
+async function restoreOriginal(id) {
+  try {
+    await fetchJson(`/api/requisition/${id}/restore-original`, { method: 'POST' });
+    await reloadDetail(id);
+  } catch (err) { console.warn('restore failed:', err); }
 }
 
 function emailCard(d) {
@@ -1049,7 +1111,7 @@ function renderDetailView(d) {
   const rawStatus = _detailStatus || d.status;
   const status = rawStatus === 'submitted' ? 'approved' : rawStatus;
   const ext = d.extraction, sol = d.resolution;
-  const simpleHeader = ['needs_human_review','needs_clarification','security','waiting_approval','approved','rejected'].includes(status);
+  const simpleHeader = ['needs_human_review','security','waiting_approval','approved','rejected'].includes(status);
   // Show chain + readonly PO for all post-submission states
   const showChain    = ['waiting_approval', 'approved', 'rejected'].includes(status);
   const showReadonly = showChain;
@@ -1074,12 +1136,11 @@ function renderDetailView(d) {
 function detailHeader(status, d, ext, sol) {
   const currency       = ext?.currency || 'CHF';
   const rawTotal       = rawTotalOf(ext);
-  const isNeedsReview  = status === 'needs_human_review' || status === 'needs_clarification';
+  const isNeedsReview  = status === 'needs_human_review';
   const isWaiting      = status === 'waiting_approval';
   const isApproved     = status === 'approved';
   const isRejected     = status === 'rejected';
-  // Show needs_clarification with the same badge as needs_human_review
-  const displayStatus  = status === 'needs_clarification' ? 'needs_human_review' : status;
+  const displayStatus  = status;
 
   const totalBlock = `
     <div class="detail-header-total">
@@ -1095,18 +1156,28 @@ function detailHeader(status, d, ext, sol) {
     rightHtml = `${totalBlock}
       <div style="font-size:13px;color:#166534;font-weight:600">✓ All approvers approved</div>`;
   } else if (isRejected) {
+    // Two kinds of rejected: dismissed from review (never had an approval chain) vs
+    // rejected by an approver inside the chain. Distinguish by whether approval state exists.
+    const wasInChain = d.approvalState?.states && Object.keys(d.approvalState.states).length > 0;
     rightHtml = `${totalBlock}
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-        <div style="font-size:13px;color:#991b1b;font-weight:600">✗ Rejected by an approver</div>
-        <button class="ghost" style="font-size:12px;height:28px;padding:0 12px" onclick="resetToWaiting()">Reset to waiting for approval</button>
+        <div style="font-size:13px;color:#991b1b;font-weight:600">${wasInChain ? '✗ Rejected by an approver' : '✗ Dismissed'}</div>
+        ${wasInChain
+          ? `<button class="ghost" style="font-size:12px;height:28px;padding:0 12px" onclick="resetToWaiting()">Reset to waiting for approval</button>`
+          : `<button class="ghost" style="font-size:12px;height:28px;padding:0 12px" onclick="reopenReview()">Reopen for review</button>`
+        }
       </div>`;
   } else {
     const clarifyBtn = isNeedsReview
       ? `<button class="ghost" onclick="requestClarification()">Request clarification</button>`
       : '';
+    const dismissBtn = isNeedsReview
+      ? `<button class="btn-reject" onclick="dismissReview()">Dismiss</button>`
+      : '';
     rightHtml = `${totalBlock}
       <div class="detail-header-actions">
         ${clarifyBtn}
+        ${dismissBtn}
         <span id="submit-btn-wrap">
           <button class="btn-submit-appr" onclick="submitForApproval()">Submit for approval</button>
         </span>
@@ -1121,13 +1192,74 @@ function detailHeader(status, d, ext, sol) {
       </div>
       ${d.email?.subject ? `<div style="font-size:12px;color:#6b7280">${esc(d.email.subject)}</div>` : ''}
       ${(() => {
+        // Correction linkage banner (clerk resolves — nothing auto-parked).
+        if (d.supersedesId) {
+          const n = d.supersedesId;
+          const subj = d.supersedesSubject ? ' — ' + esc(d.supersedesSubject) : '';
+          const discarded = d.status === 'rejected';
+          const originalSuperseded = d.supersedesStatus === 'superseded';
+          let body, actions;
+          if (discarded) {
+            body = 'This correction was discarded — the original order stays active.';
+            actions = '';
+          } else if (originalSuperseded) {
+            body = `Original #${n} is superseded — approve this correction to create the single PO. (Undo from #${n} if needed.)`;
+            actions = '';
+          } else {
+            body = 'Approving this replaces the original. Choose one: supersede the original (park it, approve this), or discard this correction (keep the original).';
+            actions = `
+              <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+                <button class="ghost" style="font-size:11px;height:26px;padding:0 10px" onclick="supersedeOriginal(${d.id})">Supersede original #${n}</button>
+                <button class="ghost" style="font-size:11px;height:26px;padding:0 10px" onclick="discardCorrection(${d.id})">Discard this correction</button>
+              </div>`;
+          }
+          return `<div style="margin-top:8px;padding:10px 12px;border-radius:6px;background:#eff6ff;border:1px solid #bfdbfe">
+            <div style="font-size:12px;font-weight:700;color:#1e3a5f;margin-bottom:3px">↩ This corrects requisition <a href="#/detail/${n}">#${n}</a>${subj}${originalSuperseded ? ' ✓' : ''}</div>
+            <div style="font-size:12px;color:#1e3a5f;line-height:1.4">${body}</div>
+            ${actions}
+          </div>`;
+        }
+        if (d.supersededById) {
+          const m = d.supersededById;
+          const subj = d.supersededBySubject ? ' — ' + esc(d.supersededBySubject) : '';
+          const isParked = d.status === 'superseded';
+          const note = isParked
+            ? 'This requisition was superseded and will not become a PO.'
+            : 'A correction targets this requisition — its PO is blocked until you resolve the correction (from that correction row).';
+          const restoreBtn = isParked
+            ? `<button class="ghost" style="margin-top:8px;font-size:11px;height:26px;padding:0 10px" onclick="restoreOriginal(${d.id})">Restore this requisition</button>` : '';
+          return `<div style="margin-top:8px;padding:10px 12px;border-radius:6px;background:#f3f4f6;border:1px solid #e5e7eb">
+            <div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:3px">⤼ Superseded by correction <a href="#/detail/${m}">#${m}</a>${subj}</div>
+            <div style="font-size:12px;color:#6b7280;line-height:1.4">${note}</div>
+            ${restoreBtn}
+          </div>`;
+        }
+        return '';
+      })()}
+      ${(() => {
+        const AMENDMENT_CODES = { amendment_after_po: 'Amendment — PO already submitted', amendment_merged: 'Correction merged — review the merged values', correction_target_not_found: 'Correction — original not found' };
         const items = (d.reviewItems || []).slice().sort((a, b) => {
           const sev = { security: 0, human: 1, clarification: 2 };
           return (sev[a.queue] ?? 9) - (sev[b.queue] ?? 9);
         });
-        return items.length
-          ? `<div style="margin-top:5px;display:flex;flex-direction:column;gap:2px">${items.map(it => `<div style="font-size:12px;color:#92400e">⚑ ${esc(it.detail)}</div>`).join('')}</div>`
+        if (!items.length) return '';
+        const amendItems   = items.filter(it => AMENDMENT_CODES[it.code]);
+        const regularItems = items.filter(it => !AMENDMENT_CODES[it.code]);
+        const amendHtml = amendItems.map(it => {
+          const isAfterPo = it.code === 'amendment_after_po';
+          const bg     = isAfterPo ? '#fff7ed' : '#eff6ff';
+          const border = isAfterPo ? '#fed7aa' : '#bfdbfe';
+          const color  = isAfterPo ? '#7c2d12' : '#1e3a5f';
+          const icon   = isAfterPo ? '⚠' : 'ℹ';
+          return `<div style="margin-top:8px;padding:10px 12px;border-radius:6px;background:${bg};border:1px solid ${border}">
+            <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:3px">${icon} ${esc(AMENDMENT_CODES[it.code])}</div>
+            <div style="font-size:12px;color:${color};line-height:1.4">${esc(it.detail)}</div>
+          </div>`;
+        }).join('');
+        const regularHtml = regularItems.length
+          ? `<div style="margin-top:5px;display:flex;flex-direction:column;gap:2px">${regularItems.map(it => `<div style="font-size:12px;color:#92400e">⚑ ${esc(it.detail)}</div>`).join('')}</div>`
           : '';
+        return amendHtml + regularHtml;
       })()}
     </div>
     <div class="detail-header-right">${rightHtml}</div>
@@ -1158,7 +1290,7 @@ function submitForApproval() {
   const d = window._detail;
   if (!d) return;
   const status = _detailStatus || d.status;
-  const isNeedsReview = status === 'needs_human_review' || status === 'needs_clarification';
+  const isNeedsReview = status === 'needs_human_review';
   const proceed = async () => {
     // Capture the clerk's current form values NOW, before the form becomes read-only.
     _clerkFormValues = collectFormValues();
@@ -1204,10 +1336,11 @@ function submitForApproval() {
 }
 
 let _confirmCallback = null;
-function openConfirmModal(title, message, onConfirm) {
+function openConfirmModal(title, message, onConfirm, confirmLabel = 'Submit anyway') {
   _confirmCallback = onConfirm;
   document.getElementById('confirm-title').textContent = title;
   document.getElementById('confirm-message').textContent = message;
+  document.getElementById('confirm-yes-btn').textContent = confirmLabel;
   document.getElementById('confirm-modal').classList.add('open');
 }
 function closeConfirmModal() {
@@ -1469,7 +1602,7 @@ function remindApprover(email, name) {
 // isAlt: true when clicking the alternate-approver chip (keyed as 'alt-N').
 // When all required steps approve, submits the PO to the backend.
 // Reads clerk-edited form values so the submit endpoint can fill in data that
-// was missing in the original extraction (e.g. for needs_clarification cases).
+// was missing in the original extraction.
 function collectFormValues() {
   const supplier_id        = document.getElementById('input-supplier_id')?.value?.trim() || null;
   const delivery_date      = document.getElementById('input-delivery_date')?.value?.trim() || null;

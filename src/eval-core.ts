@@ -19,7 +19,7 @@ export const LabelSchema = z.object({
   email_file:  z.string(),
   description: z.string(),
   expected: z.object({
-    status:             z.enum(['waiting_approval', 'needs_clarification', 'needs_human_review', 'security', 'failed']),
+    status:             z.enum(['waiting_approval', 'needs_human_review', 'security', 'failed']),
     supplier_id:        z.string().nullable(),
     cost_centre_code:   z.string().nullable(),
     currency:           z.string().nullable(),
@@ -185,7 +185,7 @@ export function aggregate(rows: EvalRow[]): EvalMetrics {
   const statusMatches = rows.filter(r => r.checks.find(c => c.field === 'status')?.pass).length;
   const reviewShare = rows.filter(r =>
     r.result.status === 'needs_human_review' ||
-    r.result.status === 'needs_clarification' ||
+    r.result.status === 'needs_human_review' ||
     r.result.status === 'security',
   ).length;
 

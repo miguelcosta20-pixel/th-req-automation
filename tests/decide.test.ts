@@ -127,11 +127,11 @@ describe('decide — needs_human_review', () => {
 
 // ── Clarification ─────────────────────────────────────────────────────────────
 
-describe('decide — needs_clarification', () => {
+describe('decide — clarification reasons', () => {
   it('T61 — missing delivery date → clarification, draft reply included', () => {
     const res: FullResolution = { ...goodResolution, delivery: noDeliveryDate };
     const d = decide(goodExtraction, res, thresholds);
-    expect(d.status).toBe('needs_clarification');
+    expect(d.status).toBe('needs_human_review');
     expect(d.reasons.some(r => r.code === 'missing_delivery_date')).toBe(true);
     expect(d.draftReply).toBeTruthy();
     expect(d.draftReply).toContain('Required delivery date');
@@ -140,7 +140,7 @@ describe('decide — needs_clarification', () => {
   it('T62 — no cost centre resolved → clarification', () => {
     const res: FullResolution = { ...goodResolution, costCentre: null, chain: null };
     const d = decide(goodExtraction, res, thresholds);
-    expect(d.status).toBe('needs_clarification');
+    expect(d.status).toBe('needs_human_review');
     expect(d.reasons.some(r => r.code === 'missing_cost_centre')).toBe(true);
   });
 
@@ -150,14 +150,14 @@ describe('decide — needs_clarification', () => {
       field_confidence: { requester_name: 0.9, requester_email: 0.9, supplier_name: 0.65, currency: 0.9, line_items: 0.9 },
     };
     const d = decide(ext, goodResolution, thresholds);
-    expect(d.status).toBe('needs_clarification');
+    expect(d.status).toBe('needs_human_review');
     expect(d.reasons.some(r => r.code === 'low_confidence' && r.queue === 'clarification')).toBe(true);
   });
 
   it('T64 — missing delivery date + cost centre → clarification with both reasons', () => {
     const res: FullResolution = { ...goodResolution, delivery: noDeliveryDate, costCentre: null, chain: null };
     const d = decide(goodExtraction, res, thresholds);
-    expect(d.status).toBe('needs_clarification');
+    expect(d.status).toBe('needs_human_review');
     expect(d.reasons.some(r => r.code === 'missing_delivery_date')).toBe(true);
     expect(d.reasons.some(r => r.code === 'missing_cost_centre')).toBe(true);
     expect(d.draftReply).toBeTruthy();

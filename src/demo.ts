@@ -153,6 +153,7 @@ interface RequisitionRow {
   extraction_json: string | null; resolution_json: string | null;
   draft_reply: string | null; email_path: string; message_id: string;
   po_number: string | null; approval_state_json: string | null;
+  supersedes_requisition_id: number | null;
 }
 
 function minConfidence(extraction: any): number | null {
@@ -217,7 +218,7 @@ function queueRows() {
   const rows = db.prepare(`
     SELECT r.id, r.status, r.subject, r.sender_name, r.sender_email,
            r.received_at, r.created_at, r.extraction_json, r.resolution_json,
-           r.approval_state_json,
+           r.approval_state_json, r.supersedes_requisition_id,
            (SELECT po_number FROM po WHERE po.requisition_id = r.id) AS po_number
     FROM requisition r
     ORDER BY r.id DESC
@@ -229,6 +230,14 @@ function queueRows() {
   for (const rv of reviews) {
     if (!byReq.has(rv.requisition_id)) byReq.set(rv.requisition_id, []);
     byReq.get(rv.requisition_id)!.push(rv);
+  }
+
+  // Reverse link: which (non-discarded) correction supersedes each original.
+  const supersededBy = new Map<number, number>();
+  for (const r of rows) {
+    if (r.supersedes_requisition_id != null && r.status !== 'rejected') {
+      supersededBy.set(r.supersedes_requisition_id, r.id);
+    }
   }
 
   return rows.map(r => {
@@ -273,6 +282,8 @@ function queueRows() {
       poNumber:        r.po_number,
       receivedAt:      r.received_at,
       createdAt:       r.created_at,
+      supersedesId:    r.supersedes_requisition_id,
+      supersededById:  supersededBy.get(r.id) ?? null,
     };
   });
 }
@@ -310,6 +321,16 @@ async function requisitionDetail(id: number) {
     };
   }
 
+  // Correction linkage: the original this row corrects, and any live correction
+  // that supersedes this row. Subjects are included so the UI can label the links.
+  const supersedesId = r.supersedes_requisition_id;
+  const supersedesTarget = supersedesId != null
+    ? (db.prepare(`SELECT subject, status FROM requisition WHERE id = ?`).get(supersedesId) as { subject: string | null; status: string } | undefined)
+    : undefined;
+  const supersededBy = db.prepare(
+    `SELECT id, subject FROM requisition WHERE supersedes_requisition_id = ? AND status != 'rejected' ORDER BY id DESC LIMIT 1`,
+  ).get(id) as { id: number; subject: string | null } | undefined;
+
   return {
     id: r.id,
     status: r.status,
@@ -322,6 +343,11 @@ async function requisitionDetail(id: number) {
     approvalState: safeParse(r.approval_state_json),
     po: po ? { ...po, api_response: safeParse(po.api_response_json) } : null,
     llmCalls,
+    supersedesId:        supersedesId ?? null,
+    supersedesSubject:   supersedesTarget?.subject ?? null,
+    supersedesStatus:    supersedesTarget?.status ?? null,
+    supersededById:      supersededBy?.id ?? null,
+    supersededBySubject: supersededBy?.subject ?? null,
   };
 }
 
@@ -506,6 +532,40 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    // Supersede the original behind a correction. Called on the CORRECTION row:
+    // it reads the correction's supersedes_requisition_id link and parks that
+    // original ('superseded') so it can no longer become a PO. The correction
+    // itself stays and proceeds through normal review → approval.
+    const supersedeMatch = path.match(/^\/api\/requisition\/(\d+)\/supersede-original$/);
+    if (method === 'POST' && supersedeMatch) {
+      const correctionId = parseInt(supersedeMatch[1], 10);
+      const corr = db.prepare(`SELECT supersedes_requisition_id AS target FROM requisition WHERE id = ?`)
+        .get(correctionId) as { target: number | null } | undefined;
+      if (!corr) { sendJson(res, 404, { error: 'correction not found' }); return; }
+      if (corr.target == null) { sendJson(res, 400, { error: 'this requisition does not supersede another' }); return; }
+
+      const target = db.prepare(`SELECT status FROM requisition WHERE id = ?`).get(corr.target) as { status: string } | undefined;
+      if (!target) { sendJson(res, 404, { error: 'original requisition not found' }); return; }
+      const hasPo = db.prepare(`SELECT 1 FROM po WHERE requisition_id = ?`).get(corr.target);
+      if (hasPo) { sendJson(res, 409, { error: 'the original already has a PO — cannot supersede it' }); return; }
+
+      db.prepare(`UPDATE requisition SET status = 'superseded', updated_at = datetime('now') WHERE id = ?`).run(corr.target);
+      sendJson(res, 200, { ok: true, originalId: corr.target });
+      return;
+    }
+
+    // Restore a superseded original back to the approval queue (undo supersede).
+    const restoreMatch = path.match(/^\/api\/requisition\/(\d+)\/restore-original$/);
+    if (method === 'POST' && restoreMatch) {
+      const id = parseInt(restoreMatch[1], 10);
+      const row = db.prepare(`SELECT status FROM requisition WHERE id = ?`).get(id) as { status: string } | undefined;
+      if (!row) { sendJson(res, 404, { error: 'not found' }); return; }
+      if (row.status !== 'superseded') { sendJson(res, 400, { error: 'requisition is not superseded' }); return; }
+      db.prepare(`UPDATE requisition SET status = 'waiting_approval', updated_at = datetime('now') WHERE id = ?`).run(id);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     // Marks a requisition as rejected when an approver declines it.
     const rejectMatch = path.match(/^\/api\/requisition\/(\d+)\/reject$/);
     if (method === 'POST' && rejectMatch) {
@@ -551,6 +611,21 @@ const server = createServer(async (req, res) => {
 
       const existing = db.prepare(`SELECT po_number FROM po WHERE requisition_id = ?`).get(id) as { po_number: string } | undefined;
       if (existing) { sendJson(res, 200, { poNumber: existing.po_number, alreadySubmitted: true }); return; }
+
+      // Block a second PO for an order that has an open correction. The original
+      // stays active until the clerk resolves the correction (supersede this
+      // original, or discard the correction).
+      if (row.status === 'superseded') {
+        sendJson(res, 409, { error: 'This requisition was superseded by a correction — approve the correction instead, or restore this one first.' });
+        return;
+      }
+      const pendingCorrection = db.prepare(
+        `SELECT id FROM requisition WHERE supersedes_requisition_id = ? AND status NOT IN ('rejected')`,
+      ).get(id) as { id: number } | undefined;
+      if (pendingCorrection) {
+        sendJson(res, 409, { error: `A correction (#${pendingCorrection.id}) targets this requisition — resolve it first: supersede this original or discard the correction.` });
+        return;
+      }
 
       let ext = safeParse<any>(row.extraction_json);
       let sol = safeParse<any>(row.resolution_json);

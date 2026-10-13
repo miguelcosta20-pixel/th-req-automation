@@ -2,7 +2,7 @@
   "email_file": "data/emails/email_06.eml",
   "description": "Clarification — verbal phone quote, explicit prices, no delivery date",
   "expected": {
-    "status": "needs_clarification",
+    "status": "needs_human_review",
     "supplier_id": "SUP-012",
     "cost_centre_code": "CC-1003",
     "currency": "USD",
